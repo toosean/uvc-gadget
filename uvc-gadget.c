@@ -31,13 +31,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/video.h>
 #include <linux/videodev2.h>
 
 #include "uvc.h"
-
 
 #define WIDTH1  640
 #define HEIGHT1 360
@@ -52,43 +52,148 @@
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
 
-#define clamp(val, min, max)                                                                                           \
-    ({                                                                                                                 \
-        typeof(val) __val = (val);                                                                                     \
-        typeof(min) __min = (min);                                                                                     \
-        typeof(max) __max = (max);                                                                                     \
-        (void)(&__val == &__min);                                                                                      \
-        (void)(&__val == &__max);                                                                                      \
-        __val = __val < __min ? __min : __val;                                                                         \
-        __val > __max ? __max : __val;                                                                                 \
+#define clamp(val, min, max)                        \
+    ({                                              \
+        typeof(val) __val = (val);                  \
+        typeof(min) __min = (min);                  \
+        typeof(max) __max = (max);                  \
+        (void)(&__val == &__min);                   \
+        (void)(&__val == &__max);                   \
+        __val = __val < __min ? __min : __val;      \
+        __val > __max ? __max : __val;              \
     })
 
 #define ARRAY_SIZE(a) ((sizeof(a) / sizeof(a[0])))
 #define pixfmtstr(x) (x) & 0xff, ((x) >> 8) & 0xff, ((x) >> 16) & 0xff, ((x) >> 24) & 0xff
 
-/*
- * The UVC webcam gadget kernel driver (g_webcam.ko) supports changing
- * the Brightness attribute of the Processing Unit (PU). by default. If
- * the underlying video capture device supports changing the Brightness
- * attribute of the image being acquired (like the Virtual Video, VIVI
- * driver), then we should route this UVC request to the respective
- * video capture device.
- *
- * Incase, there is no actual video capture device associated with the
- * UVC gadget and we wish to use this application as the final
- * destination of the UVC specific requests then we should return
- * pre-cooked (static) responses to GET_CUR(BRIGHTNESS) and
- * SET_CUR(BRIGHTNESS) commands to keep command verifier test tools like
- * UVC class specific test suite of USBCV, happy.
- *
- * Note that the values taken below are in sync with the VIVI driver and
- * must be changed for your specific video capture device. These values
- * also work well in case there in no actual video capture device.
- */
-#define PU_BRIGHTNESS_MIN_VAL 0
-#define PU_BRIGHTNESS_MAX_VAL 255
-#define PU_BRIGHTNESS_STEP_SIZE 1
-#define PU_BRIGHTNESS_DEFAULT_VAL 55
+struct camera_ctrl {
+    bool enabled;
+    unsigned int type;
+    const char * name;
+    unsigned int value;
+    unsigned int minimum;
+    unsigned int maximum;
+    unsigned int step;
+    unsigned int default_value;
+    unsigned int v4l2_ctrl;
+    int v4l2_minimum;
+    int v4l2_maximum;
+};
+
+static struct camera_ctrl camera_ctrls[] = {
+    [UVC_PU_BRIGHTNESS_CONTROL] = {
+        .name = "BRIGHTNESS",
+        .enabled = false,
+        .minimum = 0,
+        .maximum = 100,
+        .step = 1,
+        .default_value = 50,
+        .v4l2_ctrl = V4L2_CID_BRIGHTNESS,
+        .v4l2_minimum = 0,
+        .v4l2_maximum = 100
+    },
+    [UVC_PU_CONTRAST_CONTROL] = {
+        .name = "CONTRAST",
+        .enabled = false,
+        .minimum = 0,
+        .maximum = 100,
+        .step = 1,
+        .default_value = 50,
+        .v4l2_ctrl = V4L2_CID_CONTRAST,
+        .v4l2_minimum = 0,
+        .v4l2_maximum = 100
+    },
+    [UVC_PU_SATURATION_CONTROL] = {
+        .name = "SATURATION",
+        .enabled = false,
+        .minimum = 0,
+        .maximum = 100,
+        .step = 1,
+        .default_value = 50,
+        .v4l2_ctrl = V4L2_CID_SATURATION,
+        .v4l2_minimum = 0,
+        .v4l2_maximum = 100
+    },
+    [UVC_PU_SHARPNESS_CONTROL] = {
+        .name = "SHARPNESS",
+        .enabled = false,
+        .minimum = 0,
+        .maximum = 100,
+        .step = 1,
+        .default_value = 50,
+        .v4l2_ctrl = V4L2_CID_SHARPNESS,
+        .v4l2_minimum = 0,
+        .v4l2_maximum = 100
+    },
+    [UVC_PU_GAIN_CONTROL] = {
+        .name = "GAIN",
+        .enabled = false,
+        .minimum = 0,
+        .maximum = 16,
+        .step = 1,
+        .default_value = 16,
+        .v4l2_ctrl = V4L2_CID_GAIN,
+        .v4l2_minimum = 0,
+        .v4l2_maximum = 16
+    },
+    [UVC_PU_HUE_CONTROL] = {
+        .name = "HUE",
+        .enabled = false,
+        .minimum = 0,
+        .maximum = 100,
+        .step = 1,
+        .default_value = 50,
+        .v4l2_ctrl = V4L2_CID_HUE,
+        .v4l2_minimum = 0,
+        .v4l2_maximum = 100
+    },
+    [UVC_PU_GAMMA_CONTROL] = {
+        .name = "GAMMA",
+        .enabled = false,
+        .minimum = 0,
+        .maximum = 100,
+        .step = 1,
+        .default_value = 50,
+        .v4l2_ctrl = V4L2_CID_GAMMA,
+        .v4l2_minimum = 0,
+        .v4l2_maximum = 100
+    },
+    [UVC_PU_BACKLIGHT_COMPENSATION_CONTROL] = {
+        .name = "BACKLIGHT_COMPENSATION",
+        .enabled = false,
+        .minimum = 0,
+        .maximum = 100,
+        .step = 1,
+        .default_value = 50,
+        .v4l2_ctrl = V4L2_CID_BACKLIGHT_COMPENSATION,
+        .v4l2_minimum = 0,
+        .v4l2_maximum = 100
+    },
+    [UVC_PU_POWER_LINE_FREQUENCY_CONTROL] = {
+        .name = "POWER_LINE_FREQUENCY",
+        .enabled = false,
+        .minimum = 0,
+        .maximum = 3,
+        .step = 1,
+        .default_value = 1,
+        .v4l2_ctrl = V4L2_CID_POWER_LINE_FREQUENCY,
+        .v4l2_minimum = 0,
+        .v4l2_maximum = 3
+    },
+    [UVC_PU_WHITE_BALANCE_COMPONENT_CONTROL] = {
+        .name = "WHITE_BALANCE_COMPONENT",
+        .enabled = false,
+        .minimum = 0,
+        .maximum = 7999,
+        .step = 1,
+        .default_value = 1000,
+        .v4l2_ctrl = V4L2_CID_RED_BALANCE,
+        .v4l2_minimum = 0,
+        .v4l2_maximum = 7999
+    }
+
+    // case UVC_PU_WHITE_BALANCE_COMPONENT_AUTO_CONTROL: return V4L2_CID_AUTO_WHITE_BALANCE;
+};
 
 /* ---------------------------------------------------------------------------
  * Generic stuff
@@ -123,45 +228,15 @@ struct uvc_format_info {
 };
 
 static const struct uvc_frame_info uvc_frames_yuyv[] = {
-    {
-        WIDTH1,
-        HEIGHT1,
-        //{666666, 10000000, 50000000, 0},
-        {50000000, 0},
-    },
-    {
-        WIDTH2,
-        HEIGHT2,
-        {50000000, 0},
-    },
-    {
-        0,
-        0,
-        {
-            0,
-        },
-    },
+    { WIDTH1, HEIGHT1, {50000000, 0}, },
+    { WIDTH2, HEIGHT2, {50000000, 0}, },
+    { 0, 0, {0,}, },
 };
 
 static const struct uvc_frame_info uvc_frames_mjpeg[] = {
-    {
-        WIDTH1,
-        HEIGHT1,
-        //{666666, 10000000, 50000000, 0},
-        {50000000, 0},
-    },
-    {
-        WIDTH2,
-        HEIGHT2,
-        {50000000, 0},
-    },
-    {
-        0,
-        0,
-        {
-            0,
-        },
-    },
+    { WIDTH1, HEIGHT1, {50000000, 0}, },
+    { WIDTH2, HEIGHT2, {50000000, 0}, },
+    { 0, 0, { 0, }, },
 };
 
 static const struct uvc_format_info uvc_formats[] = {
@@ -207,7 +282,7 @@ struct uvc_device {
     struct uvc_streaming_control commit;
     int control;
     struct uvc_request_data request_error_code;
-    unsigned int brightness_val;
+    unsigned int control_type;
 
     /* uvc buffer specific */
     enum io_method io;
@@ -243,6 +318,7 @@ struct uvc_device {
 
 /* forward declarations */
 static int uvc_video_stream(struct uvc_device *dev, int enable);
+static bool uvc_supported_controls(unsigned int uvc_control);
 
 /* ---------------------------------------------------------------------------
  * V4L2 streaming related
@@ -321,10 +397,7 @@ static int v4l2_reqbufs_mmap(struct v4l2_device *dev, int nbufs)
 
         ret = ioctl(dev->v4l2_fd, VIDIOC_QUERYBUF, &(dev->mem[i].buf));
         if (ret < 0) {
-            printf(
-                "V4L2: VIDIOC_QUERYBUF failed for buf %d: "
-                "%s (%d).\n",
-                i, strerror(errno), errno);
+            printf("V4L2: VIDIOC_QUERYBUF failed for buf %d: %s (%d).\n", i, strerror(errno), errno);
             ret = -EINVAL;
             goto err_free;
         }
@@ -515,9 +588,7 @@ static int v4l2_process_data(struct v4l2_device *dev)
         /* Check for a USB disconnect/shutdown event. */
         if (errno == ENODEV) {
             dev->udev->uvc_shutdown_requested = 1;
-            printf(
-                "UVC: Possible USB shutdown requested from "
-                "Host, seen during VIDIOC_QBUF\n");
+            printf("UVC: Possible USB shutdown requested from Host, seen during VIDIOC_QBUF\n");
             return 0;
         } else {
             return ret;
@@ -578,39 +649,53 @@ static int v4l2_set_format(struct v4l2_device *dev, struct v4l2_format *fmt)
     return 0;
 }
 
-static int v4l2_set_ctrl(struct v4l2_device *dev, int new_val, int ctrl)
+static int v4l2_set_ctrl(struct v4l2_device *dev, struct camera_ctrl ctrl)
 {
     struct v4l2_queryctrl queryctrl;
     struct v4l2_control control;
     int ret;
+    int v4l2_ctrl_value = 0;
 
     CLEAR(queryctrl);
 
-    switch (ctrl) {
-    case V4L2_CID_BRIGHTNESS:
-        queryctrl.id = V4L2_CID_BRIGHTNESS;
+    if (ctrl.value < ctrl.minimum) {
+        ctrl.value = ctrl.minimum;
+    }
+
+    if (ctrl.value > ctrl.maximum) {
+        ctrl.value = ctrl.maximum;
+    }
+
+    v4l2_ctrl_value = (ctrl.value - ctrl.minimum) * (ctrl.v4l2_maximum - ctrl.v4l2_minimum) / (ctrl.maximum - ctrl.minimum) + ctrl.v4l2_minimum;
+
+    unsigned int steps = 1;
+    unsigned int step = 1;
+    unsigned int v4l2_ctrl = ctrl.v4l2_ctrl;
+
+    if (v4l2_ctrl == V4L2_CID_RED_BALANCE) {
+        steps = 2;
+    }
+
+    for (step = 1; step <= steps; step++) {
+        queryctrl.id = v4l2_ctrl;
         ret = ioctl(dev->v4l2_fd, VIDIOC_QUERYCTRL, &queryctrl);
         if (-1 == ret) {
             if (errno != EINVAL)
-                printf(
-                    "V4L2: VIDIOC_QUERYCTRL"
-                    " failed: %s (%d).\n",
-                    strerror(errno), errno);
+                printf("V4L2: VIDIOC_QUERYCTRL failed: %s (%d).\n", strerror(errno), errno);
             else
-                printf(
-                    "V4L2_CID_BRIGHTNESS is not"
-                    " supported: %s (%d).\n",
-                    strerror(errno), errno);
+                printf("v4l2: %s is not supported: %s (%d).\n", ctrl.name, strerror(errno), errno);
 
             return ret;
+
         } else if (queryctrl.flags & V4L2_CTRL_FLAG_DISABLED) {
-            printf("V4L2_CID_BRIGHTNESS is not supported.\n");
+            printf("V4L2: %s is disabled.\n", ctrl.name);
             ret = -EINVAL;
             return ret;
+
         } else {
             CLEAR(control);
-            control.id = V4L2_CID_BRIGHTNESS;
-            control.value = new_val;
+            control.id = v4l2_ctrl;
+            control.value = v4l2_ctrl_value;
 
             ret = ioctl(dev->v4l2_fd, VIDIOC_S_CTRL, &control);
             if (-1 == ret) {
@@ -618,14 +703,12 @@ static int v4l2_set_ctrl(struct v4l2_device *dev, int new_val, int ctrl)
                 return ret;
             }
         }
-        printf("V4L2: Brightness control changed to value = 0x%x\n", new_val);
-        break;
 
-    default:
-        /* TODO: We don't support any other controls. */
-        return -EINVAL;
+        if (v4l2_ctrl == V4L2_CID_RED_BALANCE) {
+            v4l2_ctrl = V4L2_CID_BLUE_BALANCE;
+        }
     }
-
+    printf("V4L2: %s changed to value = %d\n", ctrl.name, v4l2_ctrl_value);
     return 0;
 }
 
@@ -668,6 +751,114 @@ static int v4l2_stop_capturing(struct v4l2_device *dev)
 
     return 0;
 }
+
+static unsigned int v4l2_to_uvc_control_code(unsigned int v4l2_code) {
+    switch(v4l2_code) {
+        case V4L2_CID_BRIGHTNESS:
+            return UVC_PU_BRIGHTNESS_CONTROL;
+
+        case V4L2_CID_CONTRAST:
+            return UVC_PU_CONTRAST_CONTROL;
+
+        case V4L2_CID_SATURATION:
+            return UVC_PU_SATURATION_CONTROL;
+
+        case V4L2_CID_HUE:
+            return UVC_PU_HUE_CONTROL;
+
+        case V4L2_CID_GAMMA:
+            return UVC_PU_GAMMA_CONTROL;
+
+        case V4L2_CID_GAIN:
+            return UVC_PU_GAIN_CONTROL;
+
+        case V4L2_CID_SHARPNESS:
+            return UVC_PU_SHARPNESS_CONTROL;
+
+        case V4L2_CID_BACKLIGHT_COMPENSATION:
+            return UVC_PU_BACKLIGHT_COMPENSATION_CONTROL;
+
+        case V4L2_CID_POWER_LINE_FREQUENCY:
+            return UVC_PU_POWER_LINE_FREQUENCY_CONTROL;
+
+        case V4L2_CID_RED_BALANCE:
+            return UVC_PU_WHITE_BALANCE_COMPONENT_CONTROL;
+
+        default:
+            return 0xffffffff;
+    }
+}
+
+static void v4l2_get_controls(struct v4l2_device *dev)
+{
+    printf("V4L2: Checking controls\n");
+    struct v4l2_queryctrl queryctrl;
+    // struct v4l2_querymenu querymenu;
+    struct v4l2_control control;
+    unsigned int id;
+    unsigned int uvc_control_code;
+    const unsigned next_fl = V4L2_CTRL_FLAG_NEXT_CTRL | V4L2_CTRL_FLAG_NEXT_COMPOUND;
+
+    memset (&queryctrl, 0, sizeof (queryctrl));
+
+    queryctrl.id = next_fl;
+    while (0 == ioctl (dev->v4l2_fd, VIDIOC_QUERYCTRL, &queryctrl)) {
+        
+        id = queryctrl.id;
+        queryctrl.id |= next_fl;
+
+        if (queryctrl.flags & V4L2_CTRL_FLAG_DISABLED) {
+            continue;
+        }
+
+        if (id && V4L2_CTRL_CLASS_USER) {
+            uvc_control_code = v4l2_to_uvc_control_code(id);
+
+            if (uvc_supported_controls(uvc_control_code)) {
+                printf ("V4L2: Supported control %s\n", queryctrl.name);
+
+                control.id = queryctrl.id;
+                if (0 == ioctl (dev->v4l2_fd, VIDIOC_G_CTRL, &control)) {
+                    camera_ctrls[uvc_control_code].enabled = true;
+                    camera_ctrls[uvc_control_code].type = queryctrl.type;
+                    camera_ctrls[uvc_control_code].v4l2_minimum = queryctrl.minimum;
+                    camera_ctrls[uvc_control_code].v4l2_maximum = queryctrl.maximum;
+                    camera_ctrls[uvc_control_code].minimum = 0;
+                    camera_ctrls[uvc_control_code].maximum = (0 - queryctrl.minimum) + queryctrl.maximum;
+                    camera_ctrls[uvc_control_code].step = queryctrl.step;
+                    camera_ctrls[uvc_control_code].default_value = (0 - queryctrl.minimum) + queryctrl.default_value;
+                    camera_ctrls[uvc_control_code].value = (0 - queryctrl.minimum) + control.value;
+
+                    printf ("V4L2:   V4L2: min: %d, max: %d, step: %d, default_value: %d, value: %d\n",
+                        queryctrl.minimum,
+                        queryctrl.maximum,
+                        queryctrl.step,
+                        queryctrl.default_value,
+                        control.value
+                    );
+
+                    printf ("V4L2:   UVC: min: %d, max: %d, step: %d, default_value: %d, value: %d\n",
+                        camera_ctrls[uvc_control_code].minimum,
+                        camera_ctrls[uvc_control_code].maximum,
+                        queryctrl.step,
+                        camera_ctrls[uvc_control_code].default_value,
+                        camera_ctrls[uvc_control_code].value
+                    );
+                }
+            } else {
+                // printf ("V4L2: Unsupported control %s\n", queryctrl.name);
+                // printf ("V4L2:   V4L2: min: %d, max: %d, step: %d, default_value: %d, value: %d\n",
+                // 	queryctrl.minimum,
+                // 	queryctrl.maximum,
+                // 	queryctrl.step,
+                // 	queryctrl.default_value,
+                // 	control.value
+                // );
+            }
+        }
+    }
+}
+
 static int v4l2_open(struct v4l2_device **v4l2, char *devname, struct v4l2_format *s_fmt)
 {
     struct v4l2_device *dev;
@@ -677,7 +868,7 @@ static int v4l2_open(struct v4l2_device **v4l2, char *devname, struct v4l2_forma
 
     fd = open(devname, O_RDWR | O_NONBLOCK, 0);
     if (fd == -1) {
-        printf("V4L2: device open failed: %s (%d).\n", strerror(errno), errno);
+        printf("V4L2: Device open failed: %s (%d).\n", strerror(errno), errno);
         return ret;
     }
 
@@ -703,7 +894,7 @@ static int v4l2_open(struct v4l2_device **v4l2, char *devname, struct v4l2_forma
         goto err;
     }
 
-    printf("V4L2 device is %s on bus %s\n", cap.card, cap.bus_info);
+    printf("V4L2: device is %s on bus %s\n", cap.card, cap.bus_info);
 
     dev->v4l2_fd = fd;
 
@@ -725,7 +916,9 @@ static int v4l2_open(struct v4l2_device **v4l2, char *devname, struct v4l2_forma
     if (ret < 0)
         goto err_free;
 
-    printf("v4l2 open succeeded, file descriptor = %d\n", fd);
+    v4l2_get_controls(dev);
+
+    printf("V4L2: Open succeeded, file descriptor = %d\n", fd);
 
     *v4l2 = dev;
 
@@ -837,6 +1030,7 @@ static int uvc_uninit_device(struct uvc_device *dev)
 
     return 0;
 }
+
 static int uvc_open(struct uvc_device **uvc, char *devname)
 {
     struct uvc_device *dev;
@@ -846,13 +1040,13 @@ static int uvc_open(struct uvc_device **uvc, char *devname)
 
     fd = open(devname, O_RDWR | O_NONBLOCK);
     if (fd == -1) {
-        printf("UVC: device open failed: %s (%d).\n", strerror(errno), errno);
+        printf("UVC: Device open failed: %s (%d).\n", strerror(errno), errno);
         return ret;
     }
 
     ret = ioctl(fd, VIDIOC_QUERYCAP, &cap);
     if (ret < 0) {
-        printf("UVC: unable to query uvc device: %s (%d)\n", strerror(errno), errno);
+        printf("UVC: Unable to query uvc device: %s (%d)\n", strerror(errno), errno);
         goto err;
     }
 
@@ -867,8 +1061,8 @@ static int uvc_open(struct uvc_device **uvc, char *devname)
         goto err;
     }
 
-    printf("uvc device is %s on bus %s\n", cap.card, cap.bus_info);
-    printf("uvc open succeeded, file descriptor = %d\n", fd);
+    printf("UVC: Device is %s on bus %s\n", cap.card, cap.bus_info);
+    printf("UVC: Open succeeded, file descriptor = %d\n", fd);
 
     dev->uvc_fd = fd;
     *uvc = dev;
@@ -1007,9 +1201,7 @@ static int uvc_video_process(struct uvc_device *dev)
          */
         if (ubuf.flags & V4L2_BUF_FLAG_ERROR) {
             dev->uvc_shutdown_requested = 1;
-            printf(
-                "UVC: Possible USB shutdown requested from "
-                "Host, seen during VIDIOC_DQBUF\n");
+            printf("UVC: Possible USB shutdown requested from Host, seen during VIDIOC_DQBUF\n");
             return 0;
         }
 
@@ -1160,10 +1352,7 @@ static int uvc_video_reqbufs_mmap(struct uvc_device *dev, int nbufs)
 
         ret = ioctl(dev->uvc_fd, VIDIOC_QUERYBUF, &(dev->mem[i].buf));
         if (ret < 0) {
-            printf(
-                "UVC: VIDIOC_QUERYBUF failed for buf %d: "
-                "%s (%d).\n",
-                i, strerror(errno), errno);
+            printf("UVC: VIDIOC_QUERYBUF failed for buf %d: %s (%d).\n", i, strerror(errno), errno);
             ret = -EINVAL;
             goto err_free;
         }
@@ -1208,7 +1397,7 @@ static int uvc_video_reqbufs_userptr(struct uvc_device *dev, int nbufs)
     ret = ioctl(dev->uvc_fd, VIDIOC_REQBUFS, &rb);
     if (ret < 0) {
         if (ret == -EINVAL)
-            printf("UVC: does not support user pointer i/o\n");
+            printf("UVC: Does not support user pointer i/o\n");
         else
             printf("UVC: VIDIOC_REQBUFS error %s (%d).\n", strerror(errno), errno);
         goto err;
@@ -1350,8 +1539,7 @@ err:
  * UVC Request processing
  */
 
-static void
-uvc_fill_streaming_control(struct uvc_device *dev, struct uvc_streaming_control *ctrl, int iframe, int iformat)
+static void uvc_fill_streaming_control(struct uvc_device *dev, struct uvc_streaming_control *ctrl, int iframe, int iformat)
 {
     const struct uvc_format_info *format;
     const struct uvc_frame_info *frame;
@@ -1379,6 +1567,7 @@ uvc_fill_streaming_control(struct uvc_device *dev, struct uvc_streaming_control 
     ctrl->bFormatIndex = iformat + 1;
     ctrl->bFrameIndex = iframe + 1;
     ctrl->dwFrameInterval = frame->intervals[0];
+
     switch (format->fcc) {
     case V4L2_PIX_FMT_YUYV:
         ctrl->dwMaxVideoFrameSize = frame->width * frame->height * 2;
@@ -1401,8 +1590,7 @@ uvc_fill_streaming_control(struct uvc_device *dev, struct uvc_streaming_control 
     ctrl->bMaxVersion = 1;
 }
 
-static void
-uvc_events_process_standard(struct uvc_device *dev, struct usb_ctrlrequest *ctrl, struct uvc_request_data *resp)
+static void uvc_events_process_standard(struct uvc_device *dev, struct usb_ctrlrequest *ctrl, struct uvc_request_data *resp)
 {
     printf("standard request\n");
     (void)dev;
@@ -1410,29 +1598,124 @@ uvc_events_process_standard(struct uvc_device *dev, struct usb_ctrlrequest *ctrl
     (void)resp;
 }
 
-static void uvc_events_process_control(
-    struct uvc_device *dev, uint8_t req, uint8_t cs, uint8_t entity_id, uint8_t len, struct uvc_request_data *resp)
+static bool uvc_supported_controls(unsigned int uvc_control)
 {
+    switch (uvc_control) {
+    case UVC_PU_BRIGHTNESS_CONTROL:
+    case UVC_PU_CONTRAST_CONTROL:
+    case UVC_PU_SHARPNESS_CONTROL:
+    case UVC_PU_SATURATION_CONTROL:
+    case UVC_PU_GAIN_CONTROL:
+    case UVC_PU_HUE_CONTROL:
+    case UVC_PU_GAMMA_CONTROL:
+    case UVC_PU_BACKLIGHT_COMPENSATION_CONTROL:
+    case UVC_PU_POWER_LINE_FREQUENCY_CONTROL:
+    case UVC_PU_WHITE_BALANCE_COMPONENT_CONTROL:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+static void uvc_events_process_control(struct uvc_device *dev, uint8_t req, uint8_t cs, uint8_t entity_id, uint8_t len, struct uvc_request_data *resp)
+{
+    printf("UVC: Process control request (entity_id %02x req %02x cs %02x)\n", entity_id, req, cs);
+
     switch (entity_id) {
-    case 0:
+    case UVC_VC_DESCRIPTOR_UNDEFINED:
+        printf("UVC:  entity: UVC_VC_DESCRIPTOR_UNDEFINED\n");
+
         switch (cs) {
         case UVC_VC_REQUEST_ERROR_CODE_CONTROL:
+            printf("UVC:  cs: UVC_VC_REQUEST_ERROR_CODE_CONTROL\n");
             /* Send the request error code last prepared. */
             resp->data[0] = dev->request_error_code.data[0];
             resp->length = dev->request_error_code.length;
             break;
 
         default:
-            /*
-             * If we were not supposed to handle this
-             * 'cs', prepare an error code response.
-             */
-            dev->request_error_code.data[0] = 0x06;
+            printf("UVC:  cs: UNKNOWN\n");
+            dev->request_error_code.data[0] = REQEC_INVALID_CONTROL;
             dev->request_error_code.length = 1;
             break;
         }
         break;
 
+    case UVC_VC_HEADER:
+        printf("UVC:  entity: UVC_VC_HEADER\n");
+        break;
+
+    case UVC_VC_INPUT_TERMINAL:
+        printf("UVC:  entity: UVC_VC_INPUT_TERMINAL\n");
+
+        if (uvc_supported_controls(cs)) {
+            if (!camera_ctrls[cs].enabled) {
+                goto unsupported_control;
+            }
+
+            switch (req) {
+            case UVC_SET_CUR:
+                printf("UVC:    %s: UVC_SET_CUR\n", camera_ctrls[cs].name);
+                resp->data[0] = 0x0;
+                resp->length = len;
+                dev->control_type = cs;
+                goto successfull_response;
+
+            case UVC_GET_MIN:
+                printf("UVC:    %s: UVC_GET_MIN\n", camera_ctrls[cs].name);
+                resp->data[0] = camera_ctrls[cs].minimum;
+                resp->length = 2;
+                goto successfull_response;
+
+            case UVC_GET_MAX:
+                printf("UVC:    %s: UVC_GET_MAX\n", camera_ctrls[cs].name);
+                resp->data[0] = camera_ctrls[cs].maximum;
+                resp->length = 2;
+                goto successfull_response;
+
+            case UVC_GET_CUR:
+                printf("UVC:    %s: UVC_GET_CUR\n", camera_ctrls[cs].name);
+                resp->length = 2;
+                memcpy(&resp->data[0], &camera_ctrls[cs].value, resp->length);
+                goto successfull_response;
+
+            case UVC_GET_INFO:
+                printf("UVC:    %s: UVC_GET_INFO\n", camera_ctrls[cs].name);
+                resp->data[0] = (uint8_t)(UVC_CONTROL_CAP_GET | UVC_CONTROL_CAP_SET);
+                resp->length = 1;
+                goto successfull_response;
+
+            case UVC_GET_DEF:
+                printf("UVC:    %s: UVC_GET_DEF\n", camera_ctrls[cs].name);
+                resp->data[0] = camera_ctrls[cs].default_value;
+                resp->length = 2;
+                goto successfull_response;
+
+            case UVC_GET_RES:
+                printf("UVC:    %s: UVC_GET_RES\n", camera_ctrls[cs].name);
+                resp->data[0] = camera_ctrls[cs].step;
+                resp->length = 2;
+                goto successfull_response;
+
+            default:
+                goto unsupported_request_code;
+
+            }
+            break;
+        } else {
+            goto unsupported_control;
+        }
+
+        break;
+
+    default:
+        printf("UVC:  entity: UNKNOWN\n");
+        break;
+    }
+
+
+    switch (entity_id) {
     /* Camera terminal unit 'UVC_VC_INPUT_TERMINAL'. */
     case 1:
         switch (cs) {
@@ -1450,31 +1733,13 @@ static void uvc_events_process_control(
                  */
                 resp->data[0] = 0x01;
                 resp->length = 1;
-                /*
-                 * For every successfully handled control
-                 * request set the request error code to no
-                 * error.
-                 */
-                dev->request_error_code.data[0] = 0x00;
-                dev->request_error_code.length = 1;
+                goto successfull_response;
                 break;
 
             case UVC_GET_INFO:
-                /*
-                 * TODO: We support Set and Get requests, but
-                 * don't support async updates on an video
-                 * status (interrupt) endpoint as of
-                 * now.
-                 */
-                resp->data[0] = 0x03;
+                resp->data[0] = (uint8_t)(UVC_CONTROL_CAP_GET | UVC_CONTROL_CAP_SET);
                 resp->length = 1;
-                /*
-                 * For every successfully handled control
-                 * request set the request error code to no
-                 * error.
-                 */
-                dev->request_error_code.data[0] = 0x00;
-                dev->request_error_code.length = 1;
+                goto successfull_response;
                 break;
 
             case UVC_GET_CUR:
@@ -1483,189 +1748,61 @@ static void uvc_events_process_control(
                 /* Auto Mode â€“ auto Exposure Time, auto Iris. */
                 resp->data[0] = 0x02;
                 resp->length = 1;
-                /*
-                 * For every successfully handled control
-                 * request set the request error code to no
-                 * error.
-                 */
-                dev->request_error_code.data[0] = 0x00;
-                dev->request_error_code.length = 1;
+                goto successfull_response;
                 break;
             default:
-                /*
-                 * We don't support this control, so STALL the
-                 * control ep.
-                 */
-                resp->length = -EL2HLT;
-                /*
-                 * For every unsupported control request
-                 * set the request error code to appropriate
-                 * value.
-                 */
-                dev->request_error_code.data[0] = 0x07;
-                dev->request_error_code.length = 1;
+                goto unsupported_request_code;
                 break;
             }
             break;
 
         default:
-            /*
-             * We don't support this control, so STALL the control
-             * ep.
-             */
-            resp->length = -EL2HLT;
-            /*
-             * If we were not supposed to handle this
-             * 'cs', prepare a Request Error Code response.
-             */
-            dev->request_error_code.data[0] = 0x06;
-            dev->request_error_code.length = 1;
+            goto unsupported_control;
             break;
         }
         break;
 
     /* processing unit 'UVC_VC_PROCESSING_UNIT' */
     case 2:
-        switch (cs) {
-        /*
-         * We support only 'UVC_PU_BRIGHTNESS_CONTROL' for Processing
-         * Unit, as our bmControls[0] = 1 for PU.
-         */
-        case UVC_PU_BRIGHTNESS_CONTROL:
-            switch (req) {
-            case UVC_SET_CUR:
-                resp->data[0] = 0x0;
-                resp->length = len;
-                /*
-                 * For every successfully handled control
-                 * request set the request error code to no
-                 * error
-                 */
-                dev->request_error_code.data[0] = 0x00;
-                dev->request_error_code.length = 1;
-                break;
-            case UVC_GET_MIN:
-                resp->data[0] = PU_BRIGHTNESS_MIN_VAL;
-                resp->length = 2;
-                /*
-                 * For every successfully handled control
-                 * request set the request error code to no
-                 * error
-                 */
-                dev->request_error_code.data[0] = 0x00;
-                dev->request_error_code.length = 1;
-                break;
-            case UVC_GET_MAX:
-                resp->data[0] = PU_BRIGHTNESS_MAX_VAL;
-                resp->length = 2;
-                /*
-                 * For every successfully handled control
-                 * request set the request error code to no
-                 * error
-                 */
-                dev->request_error_code.data[0] = 0x00;
-                dev->request_error_code.length = 1;
-                break;
-            case UVC_GET_CUR:
-                resp->length = 2;
-                memcpy(&resp->data[0], &dev->brightness_val, resp->length);
-                /*
-                 * For every successfully handled control
-                 * request set the request error code to no
-                 * error
-                 */
-                dev->request_error_code.data[0] = 0x00;
-                dev->request_error_code.length = 1;
-                break;
-            case UVC_GET_INFO:
-                /*
-                 * We support Set and Get requests and don't
-                 * support async updates on an interrupt endpt
-                 */
-                resp->data[0] = 0x03;
-                resp->length = 1;
-                /*
-                 * For every successfully handled control
-                 * request, set the request error code to no
-                 * error.
-                 */
-                dev->request_error_code.data[0] = 0x00;
-                dev->request_error_code.length = 1;
-                break;
-            case UVC_GET_DEF:
-                resp->data[0] = PU_BRIGHTNESS_DEFAULT_VAL;
-                resp->length = 2;
-                /*
-                 * For every successfully handled control
-                 * request, set the request error code to no
-                 * error.
-                 */
-                dev->request_error_code.data[0] = 0x00;
-                dev->request_error_code.length = 1;
-                break;
-            case UVC_GET_RES:
-                resp->data[0] = PU_BRIGHTNESS_STEP_SIZE;
-                resp->length = 2;
-                /*
-                 * For every successfully handled control
-                 * request, set the request error code to no
-                 * error.
-                 */
-                dev->request_error_code.data[0] = 0x00;
-                dev->request_error_code.length = 1;
-                break;
-            default:
-                /*
-                 * We don't support this control, so STALL the
-                 * default control ep.
-                 */
-                resp->length = -EL2HLT;
-                /*
-                 * For every unsupported control request
-                 * set the request error code to appropriate
-                 * code.
-                 */
-                dev->request_error_code.data[0] = 0x07;
-                dev->request_error_code.length = 1;
-                break;
-            }
-            break;
-
-        default:
-            /*
-             * We don't support this control, so STALL the control
-             * ep.
-             */
-            resp->length = -EL2HLT;
-            /*
-             * If we were not supposed to handle this
-             * 'cs', prepare a Request Error Code response.
-             */
-            dev->request_error_code.data[0] = 0x06;
-            dev->request_error_code.length = 1;
-            break;
-        }
-
         break;
 
     default:
-        /*
-         * If we were not supposed to handle this
-         * 'cs', prepare a Request Error Code response.
-         */
-        dev->request_error_code.data[0] = 0x06;
-        dev->request_error_code.length = 1;
+        goto unsupported_entity;
         break;
     }
 
-    printf("control request (req %02x cs %02x)\n", req, cs);
+    return;
+
+unsupported_entity:
+    resp->length = -EL2HLT;
+    dev->request_error_code.data[0] = REQEC_INVALID_CONTROL;
+    dev->request_error_code.length = 1;
+    return;
+
+unsupported_control:
+    resp->length = -EL2HLT;
+    dev->request_error_code.data[0] = REQEC_INVALID_CONTROL;
+    dev->request_error_code.length = 1;
+    return;
+
+unsupported_request_code:
+    resp->length = -EL2HLT;
+    dev->request_error_code.data[0] = REQEC_INVALID_REQUEST;
+    dev->request_error_code.length = 1;
+    return;
+
+successfull_response:
+    dev->request_error_code.data[0] = REQEC_NO_ERROR;
+    dev->request_error_code.length = 1;
+    return;
+
 }
 
 static void uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, uint8_t cs, struct uvc_request_data *resp)
 {
     struct uvc_streaming_control *ctrl;
 
-    printf("streaming request (req %02x cs %02x)\n", req, cs);
+    printf("UVC: streaming request (req %02x cs %02x)\n", req, cs);
 
     if (cs != UVC_VS_PROBE_CONTROL && cs != UVC_VS_COMMIT_CONTROL)
         return;
@@ -1689,7 +1826,11 @@ static void uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, ui
     case UVC_GET_MIN:
     case UVC_GET_MAX:
     case UVC_GET_DEF:
-        uvc_fill_streaming_control(dev, ctrl, req == UVC_GET_MAX ? -1 : 0, req == UVC_GET_MAX ? -1 : 0);
+        if (req == UVC_GET_MAX) {
+            uvc_fill_streaming_control(dev, ctrl, -1, -1);
+        } else {
+            uvc_fill_streaming_control(dev, ctrl, 0, 0);
+        }
         break;
 
     case UVC_GET_RES:
@@ -1709,8 +1850,7 @@ static void uvc_events_process_streaming(struct uvc_device *dev, uint8_t req, ui
     }
 }
 
-static void
-uvc_events_process_class(struct uvc_device *dev, struct usb_ctrlrequest *ctrl, struct uvc_request_data *resp)
+static void uvc_events_process_class(struct uvc_device *dev, struct usb_ctrlrequest *ctrl, struct uvc_request_data *resp)
 {
     if ((ctrl->bRequestType & USB_RECIP_MASK) != USB_RECIP_INTERFACE)
         return;
@@ -1728,17 +1868,16 @@ uvc_events_process_class(struct uvc_device *dev, struct usb_ctrlrequest *ctrl, s
         break;
     }
 }
-static void
-uvc_events_process_setup(struct uvc_device *dev, struct usb_ctrlrequest *ctrl, struct uvc_request_data *resp)
+
+static void uvc_events_process_setup(struct uvc_device *dev, struct usb_ctrlrequest *ctrl, struct uvc_request_data *resp)
 {
     dev->control = 0;
 
 #ifdef ENABLE_USB_REQUEST_DEBUG
-    printf(
-        "\nbRequestType %02x bRequest %02x wValue %04x wIndex %04x "
-        "wLength %04x\n",
+    printf("\nbRequestType %02x bRequest %02x wValue %04x wIndex %04x wLength %04x\n",
         ctrl->bRequestType, ctrl->bRequest, ctrl->wValue, ctrl->wIndex, ctrl->wLength);
 #endif
+
     switch (ctrl->bRequestType & USB_TYPE_MASK) {
     case USB_TYPE_STANDARD:
         uvc_events_process_standard(dev, ctrl, resp);
@@ -1753,57 +1892,6 @@ uvc_events_process_setup(struct uvc_device *dev, struct usb_ctrlrequest *ctrl, s
     }
 }
 
-static int
-uvc_events_process_control_data(struct uvc_device *dev, uint8_t cs, uint8_t entity_id, struct uvc_request_data *data)
-{
-    switch (entity_id) {
-    /* Processing unit 'UVC_VC_PROCESSING_UNIT'. */
-    case 2:
-        switch (cs) {
-        /*
-         * We support only 'UVC_PU_BRIGHTNESS_CONTROL' for Processing
-         * Unit, as our bmControls[0] = 1 for PU.
-         */
-        case UVC_PU_BRIGHTNESS_CONTROL:
-            memcpy(&dev->brightness_val, data->data, data->length);
-            /* UVC - V4L2 integrated path. */
-            if (!dev->run_standalone)
-                /*
-                 * Try to change the Brightness attribute on
-                 * Video capture device. Note that this try may
-                 * succeed or end up with some error on the
-                 * video capture side. By default to keep tools
-                 * like USBCV's UVC test suite happy, we are
-                 * maintaining a local copy of the current
-                 * brightness value in 'dev->brightness_val'
-                 * variable and we return the same value to the
-                 * Host on receiving a GET_CUR(BRIGHTNESS)
-                 * control request.
-                 *
-                 * FIXME: Keeping in view the point discussed
-                 * above, notice that we ignore the return value
-                 * from the function call below. To be strictly
-                 * compliant, we should return the same value
-                 * accordingly.
-                 */
-                v4l2_set_ctrl(dev->vdev, dev->brightness_val, V4L2_CID_BRIGHTNESS);
-            break;
-
-        default:
-            break;
-        }
-
-        break;
-
-    default:
-        break;
-    }
-
-    printf("Control Request data phase (cs %02x entity %02x)\n", cs, entity_id);
-
-    return 0;
-}
-
 static int uvc_events_process_data(struct uvc_device *dev, struct uvc_request_data *data)
 {
     struct uvc_streaming_control *target;
@@ -1814,40 +1902,36 @@ static int uvc_events_process_data(struct uvc_device *dev, struct uvc_request_da
     const unsigned int *interval;
     unsigned int iformat, iframe;
     unsigned int nframes;
-    unsigned int *val = (unsigned int *)data->data;
-    int ret;
+    unsigned int cs;
+    
+    // printf("uvc_events_process_data %02x\n", dev->control);
+    // printf("uvc_events_process_data DATA %02x, LENGTH %02x\n", data->data, data->length);
 
     switch (dev->control) {
     case UVC_VS_PROBE_CONTROL:
-        printf("setting probe control, length = %d\n", data->length);
+        printf("UVC: Setting probe control, length = %d\n", data->length);
         target = &dev->probe;
         break;
 
     case UVC_VS_COMMIT_CONTROL:
-        printf("setting commit control, length = %d\n", data->length);
+        printf("UVC: Setting commit control, length = %d\n", data->length);
         target = &dev->commit;
         break;
 
-    default:
-        printf("setting unknown control, length = %d\n", data->length);
+    case UVC_VS_CONTROL_UNDEFINED:
+        printf("UVC: Setting undefined control, length = %d\n", data->length);
 
-        /*
-         * As we support only BRIGHTNESS control, this request is
-         * for setting BRIGHTNESS control.
-         * Check for any invalid SET_CUR(BRIGHTNESS) requests
-         * from Host. Note that we support Brightness levels
-         * from 0x0 to 0x10 in a step of 0x1. So, any request
-         * with value greater than 0x10 is invalid.
-         */
-        if (*val > PU_BRIGHTNESS_MAX_VAL) {
-            return -EINVAL;
-        } else {
-            ret = uvc_events_process_control_data(dev, UVC_PU_BRIGHTNESS_CONTROL, 2, data);
-            if (ret < 0)
-                goto err;
-
-            return 0;
+        if (data->length > 0 && data->length <= 4) {
+            cs = dev->control_type;
+            if (uvc_supported_controls(cs)) {
+                memcpy(&camera_ctrls[cs].value, data->data, data->length);
+                v4l2_set_ctrl(dev->vdev, camera_ctrls[cs]);
+            }
         }
+        return 0;
+    default:
+        printf("UVC: Setting unknown control, length = %d\n", data->length);
+        return 0;
     }
 
     ctrl = (struct uvc_streaming_control *)&data->data;
@@ -1867,6 +1951,7 @@ static int uvc_events_process_data(struct uvc_device *dev, struct uvc_request_da
 
     target->bFormatIndex = iformat;
     target->bFrameIndex = iframe;
+
     switch (format->fcc) {
     case V4L2_PIX_FMT_YUYV:
         target->dwMaxVideoFrameSize = frame->width * frame->height * 2;
@@ -1877,6 +1962,7 @@ static int uvc_events_process_data(struct uvc_device *dev, struct uvc_request_da
         target->dwMaxVideoFrameSize = dev->imgsize;
         break;
     }
+
     target->dwFrameInterval = *interval;
 
     if (dev->control == UVC_VS_COMMIT_CONTROL) {
@@ -1886,9 +1972,6 @@ static int uvc_events_process_data(struct uvc_device *dev, struct uvc_request_da
     }
 
     return 0;
-
-err:
-    return ret;
 }
 
 static void uvc_events_process(struct uvc_device *dev)
@@ -1913,9 +1996,7 @@ static void uvc_events_process(struct uvc_device *dev)
 
     case UVC_EVENT_DISCONNECT:
         dev->uvc_shutdown_requested = 1;
-        printf(
-            "UVC: Possible USB shutdown requested from "
-            "Host, seen via UVC_EVENT_DISCONNECT\n");
+        printf("UVC: Possible USB shutdown requested from Host, seen via UVC_EVENT_DISCONNECT\n");
         return;
 
     case UVC_EVENT_SETUP:
