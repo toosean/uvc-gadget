@@ -10,6 +10,9 @@
  *   Forked source - climberhunt (Dave Hunt) - https://github.com/climberhunt/uvc-gadget
  *   Forked source - peterbay (Petr Vavrin) - https://github.com/peterbay/uvc-gadget
  * 
+ * Fixes and inspiration
+ *   delay when not streaming - https://github.com/kinweilee/v4l2-mmal-uvc/blob/master/v4l2-mmal-uvc.c
+ * 
  * Original author:
  * Copyright (C) 2010 Ideas on board SPRL <laurent.pinchart@ideasonboard.com>
  *
@@ -42,6 +45,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <time.h>
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/video.h>
@@ -1562,6 +1566,11 @@ static void processing_loop_video(struct v4l2_device * udev, struct v4l2_device 
         }
         if (FD_ISSET(vdev->fd, &fdsv)) {
             v4l2_process_data(vdev);
+        }
+
+        // fix from - https://github.com/kinweilee/v4l2-mmal-uvc/blob/master/v4l2-mmal-uvc.c
+        if (!vdev->is_streaming && !udev->is_streaming) {
+            nanosleep ((const struct timespec[]) { {0, 5000000L} }, NULL);
         }
     }
 }
