@@ -111,15 +111,31 @@ struct uvc_format_info {
     const struct uvc_frame_info *frames;
 };
 
+/*
+ * USB Device Class Definition for Video Devices - FAQ
+ * Revision 1.1 
+ * Question: How is the video frame interval (used in various payload frame descriptors and VS
+ * interface controls) derived from the frame rate?
+ *
+ * Answer: The video frame interval is specified in 100 ns units and is derived from the frame rate
+ * as follows: For a frame rate x, the video frame interval is (10,000,000/x) truncated to an integer
+ * value.
+ * For example:
+ * 15 fps: Frame interval = (10000000/15) = 666666
+ * 30 fps: Frame interval = (10000000/30) = 333333
+ * 25 fps (PAL): Frame interval = (10000000/25) = 400000
+ * 29.97 fps (NTSC): Frame interval = (10000000/29.97) = 333667
+ */
+
 static const struct uvc_frame_info uvc_frames_yuyv[] = {
-    { WIDTH1, HEIGHT1, {50000000, 0}, },
-    { WIDTH2, HEIGHT2, {50000000, 0}, },
+    { WIDTH1, HEIGHT1, {666666, 400000, 333333, 0}, },
+    { WIDTH2, HEIGHT2, {666666, 400000, 333333, 0}, },
     { 0, 0, {0,}, },
 };
 
 static const struct uvc_frame_info uvc_frames_mjpeg[] = {
-    { WIDTH1, HEIGHT1, {50000000, 0}, },
-    { WIDTH2, HEIGHT2, {50000000, 0}, },
+    { WIDTH1, HEIGHT1, {666666, 400000, 333333, 0}, },
+    { WIDTH2, HEIGHT2, {666666, 400000, 333333, 0}, },
     { 0, 0, { 0, }, },
 };
 
