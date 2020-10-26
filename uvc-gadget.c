@@ -695,6 +695,43 @@ static void v4l2_get_controls(struct v4l2_device *dev)
     }
 }
 
+// https://stackoverflow.com/a/15683117
+static void v4l2_get_available_formats(struct v4l2_device *dev)
+{
+    struct v4l2_fmtdesc fmtdesc;
+    struct v4l2_frmsizeenum frmsize;
+    unsigned int width;
+    unsigned int height;
+    CLEAR(fmtdesc);
+    fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+
+    while (ioctl(dev->fd, VIDIOC_ENUM_FMT, &fmtdesc) == 0) {
+        if (fmtdesc.pixelformat == V4L2_PIX_FMT_MJPEG || fmtdesc.pixelformat == V4L2_PIX_FMT_YUYV) {
+            frmsize.pixel_format = fmtdesc.pixelformat;
+            frmsize.index = 0;
+            while (ioctl(dev->fd, VIDIOC_ENUM_FRAMESIZES, &frmsize) >= 0) {
+                width = 0;
+                height = 0;
+                if (frmsize.type == V4L2_FRMSIZE_TYPE_DISCRETE) {
+                    width = frmsize.discrete.width;
+                    height = frmsize.discrete.height;
+
+                } else if (frmsize.type == V4L2_FRMSIZE_TYPE_STEPWISE) {
+                    width = frmsize.stepwise.max_width;
+                    height = frmsize.stepwise.max_height;
+
+                }
+
+                if (width && height) {
+                    printf("V4L2: Getting highest frame size: %c%c%c%c %ux%u\n", pixfmtstr(fmtdesc.pixelformat), width, height);
+                }
+                frmsize.index++;
+            }
+        }
+        fmtdesc.index++;
+    }
+}
+
 static int v4l2_init (struct v4l2_device * dev) {
     int ret = -EINVAL;
     struct v4l2_format fmt;
@@ -707,6 +744,8 @@ static int v4l2_init (struct v4l2_device * dev) {
                                                     : (fmt.fmt.pix.width * fmt.fmt.pix.height * 1.5);
     fmt.fmt.pix.pixelformat = settings.default_format;
     fmt.fmt.pix.field = V4L2_FIELD_ANY;
+
+    v4l2_get_available_formats(dev);
 
     /* Get the default image format supported. */
     ret = v4l2_get_format(dev);
