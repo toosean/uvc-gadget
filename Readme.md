@@ -1,17 +1,6 @@
 ## uvc-gadget
 
-**Upstream project [uvc-gadget](http://git.ideasonboard.org/uvc-gadget.git) has been updated and continuous maintenance**
 
-**Please refer to http://git.ideasonboard.org/uvc-gadget.git**
-
-UVC gadget userspace enhancement sample application
-
-Fork from  
-[uvc-gadget.git](http://git.ideasonboard.org/uvc-gadget.git)  
-Apply enhancement Bhupesh Sharma's patchset  
-[UVC gadget test application enhancements](https://www.spinics.net/lists/linux-usb/msg84376.html)  
-and Robert Baldyga's patchset  
-[Bugfixes for UVC gadget test application](https://www.spinics.net/lists/linux-usb/msg99220.html)  
 
 ## How to use
 
@@ -61,6 +50,22 @@ and Robert Baldyga's patchset
 - Add Readme/.gitignore and documentations  
   Copy linux-3.18.y/drivers/usb/gadget/function/uvc.h into repository, change include path for build
 
-### Initial
+## Initial
 
-- Fork(copy) from [uvc-gadget.git](http://git.ideasonboard.org/uvc-gadget.git)
+- Original [uvc-gadget.git](http://git.ideasonboard.org/uvc-gadget.git)
+- Fork(copy) [uvc-gadget.git - wlhe](https://github.com/wlhe/uvc-gadget)
+- Fork(copy) [uvc-gadget.git - climberhunt / Dave Hunt](https://github.com/climberhunt/uvc-gadget)
+- Fork(copy) [uvc-gadget.git - peterbay / Petr Vavrin](https://github.com/peterbay/uvc-gadget)
+
+## TODO
+ * better resolution settings (maybe from uvc gadget settings - configfs)
+ * setting of usb speed is messy (command line arguments don't correspond with usb speed enum = -s 2 != USB_SPEED_SUPER)
+     https://github.com/raspberrypi/linux/blob/1c64f4bc22811d2d371b271daa3fb27895a8abdd/include/uapi/linux/usb/ch9.h#L1140
+ * better settings for dwMaxPayloadTransferSize
+ * better usb gadget configuration - maybe https://github.com/libusbgx/libusbgx
+
+## Resources
+
+- [Raspberry Pi Zero with Pi Camera as USB Webcam / Dave Hunt](http://www.davidhunt.ie/raspberry-pi-zero-with-pi-camera-as-usb-webcam/)
+- [TC35874 to UVC gadget application / Kin Wei Lee](https://github.com/kinweilee/v4l2-mmal-uvc)
+
