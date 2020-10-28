@@ -1014,9 +1014,6 @@ static int uvc_video_qbuf(struct v4l2_device *dev)
  * 	- A SET_ALT(interface 1, alt setting 1) command from USB host,
  * 	  if the UVC gadget supports an ISOCHRONOUS video streaming endpoint
  * 	  or,
- *
- *	- A UVC_VS_COMMIT_CONTROL command from USB host, if the UVC gadget
- *	  supports a BULK type video streaming endpoint.
  */
 static void uvc_handle_streamon_event(struct v4l2_device *dev)
 {
@@ -1108,11 +1105,7 @@ static void uvc_fill_streaming_control(struct v4l2_device *dev, struct uvc_strea
     /* TODO: the UVC maxpayload transfer size should be filled
      * by the driver.
      */
-    if (!settings.bulk_mode) {
-        ctrl->dwMaxPayloadTransferSize = (settings.usb_maxpkt) * (settings.usb_mult + 1) * (settings.usb_burst + 1);
-    } else {
-        ctrl->dwMaxPayloadTransferSize = ctrl->dwMaxVideoFrameSize;
-    }
+    ctrl->dwMaxPayloadTransferSize = (settings.usb_maxpkt) * (settings.usb_mult + 1) * (settings.usb_burst + 1);
 
     ctrl->bmFramingInfo = 3;
     ctrl->bPreferedVersion = 1;
@@ -1458,9 +1451,7 @@ static void uvc_events_process(struct v4l2_device *dev)
         break;
 
     case UVC_EVENT_STREAMON:
-        if (!settings.bulk_mode) {
-            uvc_handle_streamon_event(dev);
-        }
+        uvc_handle_streamon_event(dev);
         break;
 
     case UVC_EVENT_STREAMOFF:
@@ -1487,25 +1478,9 @@ static void uvc_events_process(struct v4l2_device *dev)
 static void uvc_events_init(struct v4l2_device *dev)
 {
     struct v4l2_event_subscription sub;
-    unsigned int payload_size;
-
-    switch (dev->fcc) {
-    case V4L2_PIX_FMT_YUYV:
-        payload_size = dev->width * dev->height * 2;
-        break;
-
-    case V4L2_PIX_FMT_MJPEG:
-        payload_size = dev->imgsize;
-        break;
-    }
 
     uvc_fill_streaming_control(dev, &dev->probe, 0, 0);
     uvc_fill_streaming_control(dev, &dev->commit, 0, 0);
-
-    if (settings.bulk_mode) {
-        /* FIXME Crude hack, must be negotiated with the driver. */
-        dev->probe.dwMaxPayloadTransferSize = dev->commit.dwMaxPayloadTransferSize = payload_size;
-    }
 
     memset(&sub, 0, sizeof sub);
     sub.type = UVC_EVENT_SETUP;
@@ -1652,31 +1627,13 @@ int init()
 
     switch (settings.usb_speed) {
     case USB_SPEED_FULL:
-        /* Full Speed. */
-        if (settings.bulk_mode) {
-            settings.usb_maxpkt = 64;
-        } else {
-            settings.usb_maxpkt = 1023;
-        }
+        settings.usb_maxpkt = 1023;
         break;
 
     case USB_SPEED_HIGH:
-        /* High Speed. */
-        if (settings.bulk_mode) {
-            settings.usb_maxpkt = 512;
-        } else {
-            settings.usb_maxpkt = 1024;
-        }
-        break;
-
     case USB_SPEED_SUPER:
     default:
-        /* Super Speed. */
-        if (settings.bulk_mode) {
-            settings.usb_maxpkt = 1024;
-        } else {
-            settings.usb_maxpkt = 1024;
-        }
+        settings.usb_maxpkt = 1024;
         break;
     }
 
@@ -1786,7 +1743,6 @@ static void usage(const char *argv0)
 {
     fprintf(stderr, "Usage: %s [options]\n", argv0);
     fprintf(stderr, "Available options are\n");
-    fprintf(stderr, " -b		Use bulk mode\n");
     fprintf(stderr, " -d		Do not use any real V4L2 capture device\n");
     fprintf(stderr,
             " -f <format>    Select frame format\n\t"
@@ -1816,7 +1772,6 @@ static void usage(const char *argv0)
 
 static void check_settings()
 {
-    printf("SETTINGS: Bulk mode: %s\n", (settings.bulk_mode) ? "DISABLED": "ENABLED");
     printf("SETTINGS: Number of buffers requested: %d\n", settings.nbufs);
     if (settings.mjpeg_image) {
         printf("SETTINGS: MJPEG image: %s\n", settings.mjpeg_image);
@@ -1839,10 +1794,6 @@ int main(int argc, char *argv[])
 
     while ((opt = getopt(argc, argv, "bdf:hi:m:n:o:r:s:t:u:v:")) != -1) {
         switch (opt) {
-        case 'b':
-            settings.bulk_mode = 1;
-            break;
-
         case 'f':
             if (atoi(optarg) < 0 || atoi(optarg) > 1) {
                 fprintf(stderr, "ERROR: format value out of range\n");

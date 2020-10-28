@@ -187,7 +187,6 @@ struct v4l2_device {
     unsigned int width;
     unsigned int height;
 
-    // unsigned int bulk;
     uint8_t color;
     unsigned int imgsize;
     void *imgdata;
@@ -212,7 +211,6 @@ struct uvc_settings {
     unsigned int nbufs;
     int default_resolution;
 
-    unsigned int bulk_mode;
     /* USB speed specific */
     unsigned int usb_mult;
     unsigned int usb_burst;
@@ -229,7 +227,6 @@ struct uvc_settings settings = {
     .nbufs = 2,
     .default_resolution = 0,
 
-    .bulk_mode = 0,
     .usb_mult = 0,
     .usb_burst = 0,
     .usb_speed = USB_SPEED_SUPER
