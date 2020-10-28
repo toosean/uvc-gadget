@@ -200,6 +200,9 @@ struct v4l2_device {
     
     /* uvc device hook */
     struct v4l2_device *udev;
+
+    double last_time_video_process;
+    int buffers_processed;
 };
 
 struct uvc_settings {
@@ -210,6 +213,7 @@ struct uvc_settings {
     int default_format;
     unsigned int nbufs;
     int default_resolution;
+    bool show_fps;
 
     /* USB speed specific */
     unsigned int usb_mult;
@@ -226,6 +230,7 @@ struct uvc_settings settings = {
     .default_format = V4L2_PIX_FMT_YUYV,
     .nbufs = 2,
     .default_resolution = 0,
+    .show_fps = false,
 
     .usb_mult = 0,
     .usb_burst = 0,

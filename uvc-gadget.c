@@ -923,6 +923,10 @@ static void uvc_video_process(struct v4l2_device *dev)
 
         dev->vdev->qbuf_count++;
 
+        if (settings.show_fps) {
+            dev->buffers_processed++;
+        }
+
 #ifdef ENABLE_BUFFER_DEBUG
         printf("ReQueueing buffer at V4L2 side = %d\n", vbuf.index);
 #endif
@@ -1536,6 +1540,7 @@ static void processing_loop_image(struct v4l2_device * udev)
 static void processing_loop_video(struct v4l2_device * udev, struct v4l2_device * vdev)
 {
     struct timeval tv;
+    struct timeval video_tv;
     int activity;
     fd_set fdsv, fdsu;
     int nfds;
@@ -1577,6 +1582,16 @@ static void processing_loop_video(struct v4l2_device * udev, struct v4l2_device 
         }
         if (FD_ISSET(udev->fd, &dfds)) {
             uvc_video_process(udev);
+
+            if (settings.show_fps) {
+                gettimeofday(&video_tv, 0);
+                double now = (video_tv.tv_sec + (video_tv.tv_usec * 1e-6)) * 1000;
+                if (now - udev->last_time_video_process >= 1000) {
+                    printf("FPS: %d\n", udev->buffers_processed);
+                    udev->buffers_processed = 0;
+                    udev->last_time_video_process = now;
+                }
+            }
         }
         if (FD_ISSET(vdev->fd, &fdsv)) {
             v4l2_process_data(vdev);
@@ -1768,6 +1783,7 @@ static void usage(const char *argv0)
     fprintf(stderr, " -t		Streaming burst (b/w 0 and 15)\n");
     fprintf(stderr, " -u device	UVC Video Output device\n");
     fprintf(stderr, " -v device	V4L2 Video Capture device\n");
+    fprintf(stderr, " -x show fps information\n");
 }
 
 static void check_settings()
@@ -1778,6 +1794,8 @@ static void check_settings()
     }
     printf("SETTINGS: Video format: %s\n", (settings.default_format == V4L2_PIX_FMT_YUYV) ? "V4L2_PIX_FMT_YUYV": "V4L2_PIX_FMT_MJPEG");
     
+    printf("SETTINGS: Show FPS: %s\n", (settings.show_fps) ? "ENABLED" : "DISABLED");
+
     // !!! add usb speed
     printf("SETTINGS: USB mult: %d\n", settings.usb_mult);
     printf("SETTINGS: USB burst: %d\n", settings.usb_burst);
@@ -1792,7 +1810,7 @@ int main(int argc, char *argv[])
 {
     int opt;
 
-    while ((opt = getopt(argc, argv, "bdf:hi:m:n:o:r:s:t:u:v:")) != -1) {
+    while ((opt = getopt(argc, argv, "bdf:hi:m:n:o:r:s:t:u:v:x")) != -1) {
         switch (opt) {
         case 'f':
             if (atoi(optarg) < 0 || atoi(optarg) > 1) {
@@ -1864,6 +1882,10 @@ int main(int argc, char *argv[])
 
         case 'v':
             settings.v4l2_devname = optarg;
+            break;
+
+        case 'x':
+            settings.show_fps = true;
             break;
 
         default:
