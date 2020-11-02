@@ -89,6 +89,11 @@ enum io_method {
     IO_METHOD_USERPTR,
 };
 
+enum video_stream_action {
+    STREAM_OFF,
+    STREAM_ON,
+};
+
 /* Buffer representing one video frame */
 struct buffer {
     struct v4l2_buffer buf;
@@ -100,48 +105,49 @@ struct buffer {
  * UVC specific stuff
  */
 
-struct uvc_frame_info {
-    unsigned int width;
-    unsigned int height;
-    unsigned int intervals[8];
+enum uvc_format_keywords {
+    UVC_FORMAT_UNKNOWN,
+    UVC_FORMAT_DWDEFAULTFRAMEINTERVAL,
+    UVC_FORMAT_DWMAXVIDEOFRAMEBUFFERSIZE,
+    UVC_FORMAT_DWMAXBITRATE,
+    UVC_FORMAT_DWMINBITRATE,
+    UVC_FORMAT_WHEIGHT,
+    UVC_FORMAT_WWIDTH,
+    UVC_FORMAT_BMCAPABILITIES,
+    UVC_FORMAT_BFRAMEINDEX,
+    UVC_FORMAT_BFORMATINDEX,
 };
 
-struct uvc_format_info {
-    unsigned int fcc;
-    const struct uvc_frame_info *frames;
+struct uvc_frame_format {
+    bool defined;
+
+    enum usb_device_speed usb_speed;
+    int video_format;
+    const char * format_name;
+
+    unsigned int bFormatIndex;
+    unsigned int bFrameIndex;
+
+    unsigned int dwDefaultFrameInterval;
+    unsigned int dwMaxVideoFrameBufferSize;
+    unsigned int dwMaxBitRate;
+    unsigned int dwMinBitRate;
+    unsigned int wHeight;
+    unsigned int wWidth;
+    unsigned int bmCapabilities;
+    
+    unsigned int dwFrameInterval;
 };
 
-/*
- * USB Device Class Definition for Video Devices - FAQ
- * Revision 1.1 
- * Question: How is the video frame interval (used in various payload frame descriptors and VS
- * interface controls) derived from the frame rate?
- *
- * Answer: The video frame interval is specified in 100 ns units and is derived from the frame rate
- * as follows: For a frame rate x, the video frame interval is (10,000,000/x) truncated to an integer
- * value.
- * For example:
- * 15 fps: Frame interval = (10000000/15) = 666666
- * 30 fps: Frame interval = (10000000/30) = 333333
- * 25 fps (PAL): Frame interval = (10000000/25) = 400000
- * 29.97 fps (NTSC): Frame interval = (10000000/29.97) = 333667
- */
+int last_format_index = 0;
 
-static const struct uvc_frame_info uvc_frames_yuyv[] = {
-    { WIDTH1, HEIGHT1, {666666, 400000, 333333, 0}, },
-    { WIDTH2, HEIGHT2, {666666, 400000, 333333, 0}, },
-    { 0, 0, {0,}, },
-};
+struct uvc_frame_format uvc_frame_format_data[30];
 
-static const struct uvc_frame_info uvc_frames_mjpeg[] = {
-    { WIDTH1, HEIGHT1, {666666, 400000, 333333, 0}, },
-    { WIDTH2, HEIGHT2, {666666, 400000, 333333, 0}, },
-    { 0, 0, { 0, }, },
-};
-
-static const struct uvc_format_info uvc_formats[] = {
-    {V4L2_PIX_FMT_YUYV, uvc_frames_yuyv},
-    {V4L2_PIX_FMT_MJPEG, uvc_frames_mjpeg},
+enum uvc_frame_format_getter {
+    FORMAT_INDEX_MIN,
+    FORMAT_INDEX_MAX,
+    FRAME_INDEX_MIN,
+    FRAME_INDEX_MAX,
 };
 
 /* ---------------------------------------------------------------------------
@@ -167,6 +173,7 @@ struct v4l2_device {
     enum io_method io;
     struct buffer *mem;
     unsigned int nbufs;
+    unsigned int buffer_type;
 
     /* v4l2 buffer queue and dequeue counters */
     unsigned long long int qbuf_count;
@@ -189,10 +196,8 @@ struct v4l2_device {
 
     uint8_t color;
     unsigned int imgsize;
-    void *imgdata;
 
     /* uvc specific flags */
-    int first_buffer_queued;
     int uvc_shutdown_requested;
 
     /* v4l2 device hook */
@@ -209,32 +214,23 @@ struct uvc_settings {
     char * uvc_devname;
     char * v4l2_devname;
     enum io_method uvc_io_method;
-    char * mjpeg_image;
     int default_format;
     unsigned int nbufs;
     int default_resolution;
     bool show_fps;
 
     /* USB speed specific */
-    unsigned int usb_mult;
-    unsigned int usb_burst;
     unsigned int usb_maxpkt;
-    enum usb_device_speed usb_speed;
 };
 
 struct uvc_settings settings = {
     .uvc_devname = "/dev/video0",
     .v4l2_devname = "/dev/video1",
     .uvc_io_method = IO_METHOD_USERPTR,
-    .mjpeg_image = NULL,
     .default_format = V4L2_PIX_FMT_YUYV,
     .nbufs = 2,
     .default_resolution = 0,
     .show_fps = false,
-
-    .usb_mult = 0,
-    .usb_burst = 0,
-    .usb_speed = USB_SPEED_SUPER
 };
 
 struct control_mapping_pair {
