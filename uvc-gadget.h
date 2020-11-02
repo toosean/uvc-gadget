@@ -14,11 +14,8 @@
 #include <linux/types.h>
 #include <linux/usb/ch9.h>
 
-#define WIDTH1  640
-#define HEIGHT1 360
-
-#define WIDTH2	1920
-#define HEIGHT2 1080
+#define WIDTH  640
+#define HEIGHT 480
 
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
@@ -141,7 +138,7 @@ struct uvc_frame_format {
 
 int last_format_index = 0;
 
-struct uvc_frame_format uvc_frame_format_data[30];
+struct uvc_frame_format uvc_frame_format[30];
 
 enum uvc_frame_format_getter {
     FORMAT_INDEX_MIN,
@@ -189,13 +186,9 @@ struct v4l2_device {
     unsigned int control_type;
 
     /* uvc buffer specific */
-    struct buffer *dummy_buf;
     unsigned int fcc;
     unsigned int width;
     unsigned int height;
-
-    uint8_t color;
-    unsigned int imgsize;
 
     /* uvc specific flags */
     int uvc_shutdown_requested;
