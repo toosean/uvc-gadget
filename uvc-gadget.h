@@ -91,6 +91,13 @@ enum video_stream_action {
     STREAM_ON,
 };
 
+enum stream_control_action {
+    STREAM_CONTROL_INIT,
+    STREAM_CONTROL_MIN,
+    STREAM_CONTROL_MAX,
+    STREAM_CONTROL_SET,
+};
+
 /* Buffer representing one video frame */
 struct buffer {
     struct v4l2_buffer buf;
@@ -185,11 +192,6 @@ struct v4l2_device {
     unsigned int control_interface;
     unsigned int control_type;
 
-    /* uvc buffer specific */
-    unsigned int fcc;
-    unsigned int width;
-    unsigned int height;
-
     /* uvc specific flags */
     int uvc_shutdown_requested;
 
@@ -207,9 +209,7 @@ struct uvc_settings {
     char * uvc_devname;
     char * v4l2_devname;
     enum io_method uvc_io_method;
-    int default_format;
     unsigned int nbufs;
-    int default_resolution;
     bool show_fps;
 
     /* USB speed specific */
@@ -220,9 +220,7 @@ struct uvc_settings settings = {
     .uvc_devname = "/dev/video0",
     .v4l2_devname = "/dev/video1",
     .uvc_io_method = IO_METHOD_USERPTR,
-    .default_format = V4L2_PIX_FMT_YUYV,
     .nbufs = 2,
-    .default_resolution = 0,
     .show_fps = false,
 };
 

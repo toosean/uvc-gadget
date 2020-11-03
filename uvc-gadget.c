@@ -312,7 +312,7 @@ static int v4l2_reqbufs_mmap(struct v4l2_device *dev, int nbufs)
     }
 
     for (i = 0; i < req.count; ++i) {
-        memset(&dev->mem[i].buf, 0, sizeof(dev->mem[i].buf));
+        CLEAR(dev->mem[i].buf);
 
         dev->mem[i].buf.type = dev->buffer_type;
         dev->mem[i].buf.memory = V4L2_MEMORY_MMAP;
@@ -407,9 +407,9 @@ static int v4l2_qbuf_mmap(struct v4l2_device * dev)
     int ret;
 
     for (i = 0; i < dev->nbufs; ++i) {
-        memset(&dev->mem[i].buf, 0, sizeof(dev->mem[i].buf));
+        CLEAR(dev->mem[i].buf);
 
-        dev->mem[i].buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        dev->mem[i].buf.type = dev->buffer_type;
         dev->mem[i].buf.memory = V4L2_MEMORY_MMAP;
         dev->mem[i].buf.index = i;
 
@@ -420,10 +420,8 @@ static int v4l2_qbuf_mmap(struct v4l2_device * dev)
 
             return ret;
         }
-
         dev->qbuf_count++;
     }
-
     return 0;
 }
 
@@ -568,6 +566,10 @@ static int v4l2_apply_format(struct v4l2_device *dev, unsigned int pixelformat,
     struct v4l2_format fmt;
     int ret = -EINVAL;
 
+    if (dev->is_streaming) {
+        return -1;
+    }
+
     CLEAR(fmt);
     fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     fmt.fmt.pix.width = width;
@@ -576,10 +578,10 @@ static int v4l2_apply_format(struct v4l2_device *dev, unsigned int pixelformat,
     fmt.fmt.pix.pixelformat = pixelformat;
     fmt.fmt.pix.field = V4L2_FIELD_ANY;
 
-    ret = v4l2_get_format(dev);
-    if (ret < 0) {
-        return ret;
-    }
+    // ret = v4l2_get_format(dev);
+    // if (ret < 0) {
+    //     return ret;
+    // }
 
     ret = v4l2_set_format(dev, &fmt);
     if (ret < 0) {
@@ -777,12 +779,6 @@ static void uvc_video_process(struct v4l2_device *dev)
     if (!dev->is_streaming) {
         return;
     }
-    /* Prepare a v4l2 buffer to be dequeued from UVC domain. */
-    CLEAR(ubuf);
-
-    ubuf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-    ubuf.memory = (dev->io == IO_METHOD_MMAP) ? V4L2_MEMORY_MMAP : V4L2_MEMORY_USERPTR;
-
     /* UVC - V4L2 integrated path. */
 
     /*
@@ -803,6 +799,11 @@ static void uvc_video_process(struct v4l2_device *dev)
             return;
         }
     }
+
+    /* Prepare a v4l2 buffer to be dequeued from UVC domain. */
+    CLEAR(ubuf);
+    ubuf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
+    ubuf.memory = (dev->io == IO_METHOD_MMAP) ? V4L2_MEMORY_MMAP : V4L2_MEMORY_USERPTR;
 
     /* Dequeue the spent buffer from UVC domain */
     if (ioctl(dev->fd, VIDIOC_DQBUF, &ubuf) < 0) {
@@ -854,58 +855,8 @@ static void uvc_video_process(struct v4l2_device *dev)
     }
 }
 
-static int uvc_video_qbuf_mmap(struct v4l2_device *dev)
-{
-    unsigned int i;
-    int ret;
-
-    for (i = 0; i < dev->nbufs; ++i) {
-        memset(&dev->mem[i].buf, 0, sizeof(dev->mem[i].buf));
-
-        dev->mem[i].buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-        dev->mem[i].buf.memory = V4L2_MEMORY_MMAP;
-        dev->mem[i].buf.index = i;
-
-        ret = ioctl(dev->fd, VIDIOC_QBUF, &(dev->mem[i].buf));
-        if (ret < 0) {
-            printf("UVC: VIDIOC_QBUF failed : %s (%d).\n", strerror(errno), errno);
-            return ret;
-        }
-
-        dev->qbuf_count++;
-    }
-    return 0;
-}
-
-static int uvc_video_qbuf(struct v4l2_device *dev)
-{
-    int ret = 0;
-
-    switch (dev->io) {
-    case IO_METHOD_MMAP:
-        ret = uvc_video_qbuf_mmap(dev);
-        break;
-
-    case IO_METHOD_USERPTR:
-        break;
-
-    default:
-        ret = -EINVAL;
-        break;
-    }
-
-    return ret;
-}
-
 static void uvc_handle_streamon_event(struct v4l2_device *dev)
 {
-    int ret = -EINVAL;
- 
-    ret = v4l2_apply_format(dev->vdev, settings.default_format, dev->width, dev->height);
-    if (ret < 0) {
-        return;
-    }
-
     if (v4l2_reqbufs(dev->vdev, dev->vdev->nbufs) < 0) {
         return;
     }
@@ -925,7 +876,7 @@ static void uvc_handle_streamon_event(struct v4l2_device *dev)
 
     /* Common setup. */
     /* Queue buffers to UVC domain and start streaming. */
-    if (uvc_video_qbuf(dev) < 0) {
+    if (v4l2_qbuf(dev) < 0) {
         return;
     }
 }
@@ -964,7 +915,7 @@ static int uvc_get_frame_format_index(int format_index, enum uvc_frame_format_ge
     int i;
 
     for (i = 0; i <= last_format_index; i++) {
-        // if (format_index == -1 || format_index == (int) uvc_frame_format[i].bFrameIndex) {
+        if (format_index == -1 || format_index == (int) uvc_frame_format[i].bFormatIndex) {
 
             switch (getter) {
                 case FORMAT_INDEX_MIN:
@@ -997,7 +948,7 @@ static int uvc_get_frame_format_index(int format_index, enum uvc_frame_format_ge
                         break;
                 }
             }
-        // }
+        }
     }
     return index;
 }
@@ -1030,50 +981,62 @@ static void uvc_dump_frame_format(struct uvc_frame_format * frame_format, const 
     );
 }
 
-static void uvc_fill_streaming_control(struct uvc_streaming_control *ctrl, int iframe, int iformat)
+static void uvc_fill_streaming_control(struct v4l2_device *dev, struct uvc_streaming_control *ctrl,
+    enum stream_control_action action, int iformat, int iframe)
 {
-    printf("request uvc_fill_streaming_control: %d, %d\n", iformat, iframe);
+    int format_first;
+    int format_last;
+    int frame_first;
+    int frame_last;
+    int format_frame_first;
+    int format_frame_last;
 
-    int format_index_first = uvc_get_frame_format_index(-1, FORMAT_INDEX_MIN);
-    int format_index_last = uvc_get_frame_format_index(-1, FORMAT_INDEX_MAX);
+    switch (action) {
+    case STREAM_CONTROL_INIT:
+        printf("UVC: Streaming control: action: INIT\n");
+        break;
 
-    int frame_index_first = uvc_get_frame_format_index(-1, FRAME_INDEX_MIN);
-    int frame_index_last = uvc_get_frame_format_index(-1, FRAME_INDEX_MAX);
+    case STREAM_CONTROL_MIN:
+        printf("UVC: Streaming control: action: GET MIN\n");
+        break;
 
-    // printf("format: min: %d, max: %d\n", format_index_first, format_index_last);
-    // printf("frame: min: %d, max: %d\n", frame_index_first, frame_index_last);
+    case STREAM_CONTROL_MAX:
+        printf("UVC: Streaming control: action: GET MAX\n");
+        break;
 
-    if (iformat == 0) {
-        iformat = format_index_first;
-
-    } else if (iformat == -1) {
-        iformat = format_index_last;
-
-    } else {
-        iformat = clamp(iformat, format_index_first, format_index_last);
-
-    }
-
-    // int format_frame_index_first = uvc_get_frame_format_index(iformat, FRAME_INDEX_MIN);
-    // int format_frame_index_last = uvc_get_frame_format_index(iformat, FRAME_INDEX_MAX);
-
-    if (iframe == 0) {
-        iframe = frame_index_first;
-
-    } else if (iformat == -1) {
-        iframe = frame_index_last;
-
-    } else {
-        iframe = clamp(iframe, frame_index_first, frame_index_last);
+    case STREAM_CONTROL_SET:
+        printf("UVC: Streaming control: action: SET, format: %d, frame: %d\n", iformat, iframe);
+        break;
 
     }
 
-    printf("response: %d, %d\n", iformat, iframe);
+    format_first = uvc_get_frame_format_index(-1, FORMAT_INDEX_MIN);
+    format_last = uvc_get_frame_format_index(-1, FORMAT_INDEX_MAX);
+
+    frame_first = uvc_get_frame_format_index(-1, FRAME_INDEX_MIN);
+    frame_last = uvc_get_frame_format_index(-1, FRAME_INDEX_MAX);
+
+    if (action == STREAM_CONTROL_MIN) {
+        iformat = format_first;
+        iframe = frame_first;
+
+    } else if (action == STREAM_CONTROL_MAX) {
+        iformat = format_last;
+        iframe = frame_last;
+
+    } else {
+        iformat = clamp(iformat, format_first, format_last);
+
+        format_frame_first = uvc_get_frame_format_index(iformat, FRAME_INDEX_MIN);
+        format_frame_last = uvc_get_frame_format_index(iformat, FRAME_INDEX_MAX);
+
+        iframe = clamp(iframe, format_frame_first, format_frame_last);
+    }
 
     struct uvc_frame_format * frame_format;
     uvc_get_frame_format(&frame_format, iformat, iframe);
 
-    uvc_dump_frame_format(frame_format, "FRAME FORMAT");
+    uvc_dump_frame_format(frame_format, "FRAME");
 
     memset(ctrl, 0, sizeof *ctrl);
 
@@ -1090,11 +1053,16 @@ static void uvc_fill_streaming_control(struct uvc_streaming_control *ctrl, int i
     ctrl->dwMaxPayloadTransferSize = (settings.usb_maxpkt);
 
     ctrl->bmFramingInfo = 3;
-    ctrl->bMinVersion = format_index_first;
-    ctrl->bMaxVersion = format_index_last;
-    ctrl->bPreferedVersion = format_index_last;
+    ctrl->bMinVersion = format_first;
+    ctrl->bMaxVersion = format_last;
+    ctrl->bPreferedVersion = format_last;
 
-    // dump_uvc_streaming_control(ctrl);
+    if (dev->control == UVC_VS_COMMIT_CONTROL && action == STREAM_CONTROL_SET) {
+        v4l2_apply_format(dev->vdev, frame_format->video_format, frame_format->wWidth, frame_format->wHeight);
+
+    }
+
+    dump_uvc_streaming_control(ctrl);
 }
 
 static void uvc_interface_control(unsigned int interface, struct v4l2_device *dev,
@@ -1186,7 +1154,7 @@ static void uvc_interface_control(unsigned int interface, struct v4l2_device *de
 static void uvc_events_process_streaming(struct v4l2_device *dev, uint8_t req, uint8_t cs,
     struct uvc_request_data *resp)
 {
-    printf("UVC: streaming request CS: %s, REQ: %s\n", uvc_vs_interface_control_name(cs),
+    printf("UVC: Streaming request CS: %s, REQ: %s\n", uvc_vs_interface_control_name(cs),
         uvc_request_code_name(req));
 
     if (cs != UVC_VS_PROBE_CONTROL && cs != UVC_VS_COMMIT_CONTROL) {
@@ -1206,7 +1174,7 @@ static void uvc_events_process_streaming(struct v4l2_device *dev, uint8_t req, u
         break;
 
     case UVC_GET_MAX:
-        uvc_fill_streaming_control(ctrl, -1, -1);
+        uvc_fill_streaming_control(dev, ctrl, STREAM_CONTROL_MAX, 0, 0);
         break;
 
     case UVC_GET_CUR:
@@ -1215,7 +1183,7 @@ static void uvc_events_process_streaming(struct v4l2_device *dev, uint8_t req, u
 
     case UVC_GET_MIN:
     case UVC_GET_DEF:
-        uvc_fill_streaming_control(ctrl, 0, 0);
+        uvc_fill_streaming_control(dev, ctrl, STREAM_CONTROL_MIN, 0, 0);
         break;
 
     case UVC_GET_RES:
@@ -1295,48 +1263,13 @@ static void uvc_events_process_data_control(struct v4l2_device *dev, struct uvc_
     unsigned int iformat = (unsigned int) ctrl->bFormatIndex;
     unsigned int iframe = (unsigned int) ctrl->bFrameIndex;
 
-    printf("request uvc_events_process_data_control: %d, %d\n", iformat, iframe);
-
-    unsigned int format_index_first = uvc_get_frame_format_index(-1, FORMAT_INDEX_MIN);
-    unsigned int format_index_last = uvc_get_frame_format_index(-1, FORMAT_INDEX_MAX);
-
-    printf("format: min: %d, max: %d\n", format_index_first, format_index_last);
-
-    iformat = clamp(iformat, format_index_first, format_index_last);
-
-    unsigned int frame_index_first = uvc_get_frame_format_index(iformat, FRAME_INDEX_MIN);
-    unsigned int frame_index_last = uvc_get_frame_format_index(iformat, FRAME_INDEX_MAX);
-
-    iframe = clamp(iframe, frame_index_first, frame_index_last);
-
-    printf("frame: min: %d, max: %d\n", frame_index_first, frame_index_last);
-
-    printf("response: %d, %d\n", iformat, iframe);
-
-    struct uvc_frame_format * frame_format;
-    uvc_get_frame_format(&frame_format, iformat, iframe);
-    uvc_dump_frame_format(frame_format, "FRAME FORMAT");
-
-    target->bFormatIndex = iformat;
-    target->bFrameIndex = iframe;
-    target->dwMaxVideoFrameSize = get_frame_size(frame_format->video_format, frame_format->wWidth, frame_format->wHeight);
-
-    target->dwFrameInterval = 333333; // *interval;
-
-    if (dev->control == UVC_VS_COMMIT_CONTROL) {
-        dev->fcc = frame_format->video_format;
-        dev->width = frame_format->wWidth;
-        dev->height = frame_format->wHeight;
-
-    }
-
-    // dump_uvc_streaming_control(target);
+    uvc_fill_streaming_control(dev, target, STREAM_CONTROL_SET, iformat, iframe);
 }
 
 static void uvc_events_process_data(struct v4l2_device *dev, struct uvc_request_data *data)
 {
     int i;
-    printf("UVC: control %s, length: %d\n", uvc_vs_interface_control_name(dev->control), data->length);
+    printf("UVC: Control %s, length: %d\n", uvc_vs_interface_control_name(dev->control), data->length);
 
     switch (dev->control) {
     case UVC_VS_PROBE_CONTROL:
@@ -1380,7 +1313,7 @@ static void uvc_events_process(struct v4l2_device *dev)
         return;
     }
 
-    memset(&resp, 0, sizeof resp);
+    CLEAR(resp);
     resp.length = -EL2HLT;
 
     switch (v4l2_event.type) {
@@ -1421,10 +1354,10 @@ static void uvc_events_init(struct v4l2_device *dev)
 {
     struct v4l2_event_subscription sub;
 
-    uvc_fill_streaming_control(&dev->probe, 0, 0);
-    uvc_fill_streaming_control(&dev->commit, 0, 0);
+    uvc_fill_streaming_control(dev, &dev->probe, STREAM_CONTROL_INIT, 0, 0);
+    uvc_fill_streaming_control(dev, &dev->commit, STREAM_CONTROL_INIT, 0, 0);
 
-    memset(&sub, 0, sizeof sub);
+    CLEAR(sub);
     sub.type = UVC_EVENT_SETUP;
     ioctl(dev->fd, VIDIOC_SUBSCRIBE_EVENT, &sub);
     sub.type = UVC_EVENT_DATA;
@@ -1543,12 +1476,7 @@ int init()
     udev->vdev = vdev;
     vdev->udev = udev;
 
-    /* placeholder */
-    udev->width = WIDTH;
-    udev->height = HEIGHT;
-
     /* Set parameters as passed by user. */
-    udev->fcc = settings.default_format;
     udev->io = settings.uvc_io_method;
     udev->nbufs = settings.nbufs;
 
@@ -1803,20 +1731,12 @@ static void usage(const char *argv0)
     fprintf(stderr, "Usage: %s [options]\n", argv0);
     fprintf(stderr, "Available options are\n");
     fprintf(stderr, " -d		Do not use any real V4L2 capture device\n");
-    fprintf(stderr,
-            " -f <format>    Select frame format\n\t"
-            "0 = V4L2_PIX_FMT_YUYV\n\t"
-            "1 = V4L2_PIX_FMT_MJPEG\n");
     fprintf(stderr, " -h		Print this help screen and exit\n");
     fprintf(stderr, " -n		Number of Video buffers (b/w 2 and 32)\n");
     fprintf(stderr,
             " -o <IO method> Select UVC IO method:\n\t"
             "0 = MMAP\n\t"
             "1 = USER_PTR\n");
-    // fprintf(stderr,
-    //         " -r <resolution> Select frame resolution:\n\t"
-    //         "0 = HEIGHT1p, VGA (WIDTH1xHEIGHT1)\n\t"
-    //         "1 = 720p, (WIDTH2xHEIGHT2)\n");
     fprintf(stderr, " -u device	UVC Video Output device\n");
     fprintf(stderr, " -v device	V4L2 Video Capture device\n");
     fprintf(stderr, " -x show fps information\n");
@@ -1825,10 +1745,8 @@ static void usage(const char *argv0)
 static void check_settings()
 {
     printf("SETTINGS: Number of buffers requested: %d\n", settings.nbufs);
-    printf("SETTINGS: Video format: %s\n", (settings.default_format == V4L2_PIX_FMT_YUYV) ? "V4L2_PIX_FMT_YUYV": "V4L2_PIX_FMT_MJPEG");
     printf("SETTINGS: Show FPS: %s\n", (settings.show_fps) ? "ENABLED" : "DISABLED");
     printf("SETTINGS: IO method requested: %s\n", (settings.uvc_io_method == IO_METHOD_MMAP) ? "MMAP" : "USER_PTR");
-    // printf("SETTINGS: Default resolution: %d\n", settings.default_resolution);
     printf("SETTINGS: UVC device name: %s\n", settings.uvc_devname);
     printf("SETTINGS: V4L2 device name: %s\n", settings.v4l2_devname);
 }
@@ -1846,14 +1764,6 @@ int main(int argc, char *argv[])
 
     while ((opt = getopt(argc, argv, "bdf:hi:m:n:o:r:s:t:u:v:x")) != -1) {
         switch (opt) {
-        case 'f':
-            if (atoi(optarg) < 0 || atoi(optarg) > 1) {
-                fprintf(stderr, "ERROR: format value out of range\n");
-                goto err;
-            }
-            settings.default_format = (atoi(optarg) == 0) ? V4L2_PIX_FMT_YUYV : V4L2_PIX_FMT_MJPEG;
-            break;
-
         case 'h':
             usage(argv[0]);
             return 1;
@@ -1873,14 +1783,6 @@ int main(int argc, char *argv[])
             }
             settings.uvc_io_method = (atoi(optarg) == 0) ? IO_METHOD_MMAP : IO_METHOD_USERPTR;
             break;
-
-        // case 'r':
-        //     if (atoi(optarg) < 0 || atoi(optarg) > 1) {
-        //         fprintf(stderr, "ERROR: Frame resolution value out of range\n");
-        //         goto err;
-        //     }
-        //     settings.default_resolution = atoi(optarg);
-        //     break;
 
         case 'u':
             settings.uvc_devname = optarg;
