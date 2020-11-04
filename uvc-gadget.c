@@ -1045,24 +1045,25 @@ static void uvc_fill_streaming_control(struct v4l2_device *dev, struct uvc_strea
     ctrl->bFrameIndex = iframe;
     ctrl->dwMaxVideoFrameSize = get_frame_size(frame_format->video_format, frame_format->wWidth, frame_format->wHeight);
     
-    ctrl->dwFrameInterval = 666666; // !!!!
+    if (frame_format->dwDefaultFrameInterval >= 100000) {
+        ctrl->dwFrameInterval = frame_format->dwDefaultFrameInterval;
+    } else {
+        ctrl->dwFrameInterval = 400000;
+    }
 
-    /* TODO: the UVC maxpayload transfer size should be filled
-     * by the driver.
-     */
-    ctrl->dwMaxPayloadTransferSize = (settings.usb_maxpkt);
+    ctrl->dwMaxPayloadTransferSize = streaming_maxpacket;
 
     ctrl->bmFramingInfo = 3;
     ctrl->bMinVersion = format_first;
     ctrl->bMaxVersion = format_last;
     ctrl->bPreferedVersion = format_last;
 
+    dump_uvc_streaming_control(ctrl);
+
     if (dev->control == UVC_VS_COMMIT_CONTROL && action == STREAM_CONTROL_SET) {
         v4l2_apply_format(dev->vdev, frame_format->video_format, frame_format->wWidth, frame_format->wHeight);
 
     }
-
-    dump_uvc_streaming_control(ctrl);
 }
 
 static void uvc_interface_control(unsigned int interface, struct v4l2_device *dev,
@@ -1456,8 +1457,6 @@ int init()
     struct v4l2_device *udev;
     struct v4l2_device *vdev;
 
-    settings.usb_maxpkt = 1024;
-
     /* Open the UVC device. */
     udev = v4l2_open(settings.uvc_devname, DEVICE_TYPE_UVC);
     if (udev == NULL) {
@@ -1528,7 +1527,8 @@ static int read_value(const char * path)
     return strtol(buf, NULL, 10);
 }
 
-static void set_uvc_format_index(enum usb_device_speed usb_speed, int video_format, unsigned int bFormatIndex)
+static void set_uvc_format_index(enum usb_device_speed usb_speed, int video_format,
+    unsigned int bFormatIndex)
 {
     int i;
     for (i = 0; i <= last_format_index; i++) {
@@ -1688,14 +1688,43 @@ free:
     free(copy);
 }
 
+static void configfs_fill_streaming_params(const char* path, const char * part)
+{
+    int value = read_value(path);
+
+    /*
+     * streaming_maxburst	0..15 (ss only)
+     * streaming_maxpacket	1..1023 (fs), 1..3072 (hs/ss)
+	 * streaming_interval	1..16
+     */
+
+    if (!strncmp(part, "maxburst", 8)) {
+        streaming_maxburst = clamp(value, 0, 15);
+
+    } else if (!strncmp(part, "maxpacket", 9)) {
+        streaming_maxpacket = clamp(value, 1, 3072);
+
+    } else if (!strncmp(part, "interval", 8)) {
+        streaming_interval = clamp(value, 1, 16);
+
+    }
+}
+
 static int configfs_path_check(const char* fpath, const struct stat * sb, int tflag)
 {
     int uvc = find_text_pos(fpath, "/uvc");
     int streaming = find_text_pos(fpath, "streaming/class/");
+    int streaming_params = find_text_pos(fpath, "/streaming_");
     (void)(tflag); /* avoid warning: unused parameter 'tflag' */
 
-    if (!S_ISDIR(sb->st_mode) && streaming && uvc) {
-        configfs_fill_formats(fpath, fpath + streaming + 16);
+    if (!S_ISDIR(sb->st_mode)) {
+        if (streaming && uvc) {
+            configfs_fill_formats(fpath, fpath + streaming + 16);
+
+        } else if (streaming_params) {
+            configfs_fill_streaming_params(fpath, fpath + streaming_params + 11);
+
+        }
 
     }
 	return 0;
@@ -1722,6 +1751,10 @@ static int configfs_get_uvc_settings()
         uvc_dump_frame_format(&uvc_frame_format[i], "CONFIGFS: UVC");
 
     }
+
+    printf("CONFIGFS: STREAMING maxburst: %d\n", streaming_maxburst);
+    printf("CONFIGFS: STREAMING maxpacket: %d\n", streaming_maxpacket);
+    printf("CONFIGFS: STREAMING interval: %d\n", streaming_interval);
 
     return 0;
 }

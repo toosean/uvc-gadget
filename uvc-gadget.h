@@ -154,6 +154,10 @@ enum uvc_frame_format_getter {
     FRAME_INDEX_MAX,
 };
 
+unsigned int streaming_maxburst = 0;
+unsigned int streaming_maxpacket = 1023;
+unsigned int streaming_interval = 1;
+
 /* ---------------------------------------------------------------------------
  * V4L2 and UVC device instances
  */
@@ -211,9 +215,6 @@ struct uvc_settings {
     enum io_method uvc_io_method;
     unsigned int nbufs;
     bool show_fps;
-
-    /* USB speed specific */
-    unsigned int usb_maxpkt;
 };
 
 struct uvc_settings settings = {
