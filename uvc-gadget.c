@@ -257,7 +257,7 @@ static unsigned int get_frame_size(int pixelformat, int width, int height)
         return width * height * 2;
 
     case V4L2_PIX_FMT_MJPEG:
-        return width * height * 1.5;
+        return width * height;
         break;
     }
 
@@ -684,7 +684,7 @@ static int v4l2_apply_format(struct v4l2_device *dev, unsigned int pixelformat,
     }
 
     CLEAR(fmt);
-    fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    fmt.type = dev->buffer_type;
     fmt.fmt.pix.width = width;
     fmt.fmt.pix.height = height;
     fmt.fmt.pix.sizeimage = get_frame_size(pixelformat, width, height);
@@ -1136,6 +1136,7 @@ static void uvc_fill_streaming_control(struct v4l2_device *dev, struct uvc_strea
 
     if (dev->control == UVC_VS_COMMIT_CONTROL && action == STREAM_CONTROL_SET) {
         v4l2_apply_format(dev->vdev, frame_format->video_format, frame_format->wWidth, frame_format->wHeight);
+        v4l2_apply_format(dev, frame_format->video_format, frame_format->wWidth, frame_format->wHeight);
     }
 }
 
