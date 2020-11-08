@@ -94,6 +94,37 @@ static int sys_gpio_write(unsigned int type, char pin[], char value[])
     return 0;
 }
 
+static int sys_led_write(unsigned int type, char value[])
+{
+    FILE * sys_file;
+    char path[255];
+
+    strcpy(path, "/sys/class/leds/led0/");
+
+    switch(type) {
+        case LED_TRIGGER:
+            strcat(path, "trigger");
+            break;
+
+        case LED_BRIGHTNESS:
+            strcat(path, "brightness");
+            break;
+    }
+
+    printf("LED WRITE: Path: %s, Value: %s\n", path, value);
+
+    sys_file = fopen(path, "w");
+    if (!sys_file) {
+        printf("LED ERROR: File write failed: %s (%d).\n", strerror(errno), errno);
+        return -1;
+    }
+
+    fwrite(value, 1, strlen(value), sys_file);
+    fclose(sys_file);
+   
+    return 0;
+}
+
 static void streaming_status_enable()
 {
     int ret;
@@ -115,14 +146,33 @@ static void streaming_status_enable()
 
         settings.streaming_status_enabled = true;
     }
+
+    if (settings.streaming_status_onboard) {
+        ret = sys_led_write(LED_TRIGGER, LED_TRIGGER_NONE);
+        if (ret < 0) {
+            return;
+        }
+
+        ret = sys_led_write(LED_BRIGHTNESS, LED_BRIGHTNESS_LOW);
+        if (ret < 0) {
+            return;
+        }
+        settings.streaming_status_onboard_enabled = true;
+    }
     return;
 }
 
 static void streaming_status_value(enum video_stream_action status)
 {
     char * gpio_value = (status == STREAM_ON) ? GPIO_VALUE_ON : GPIO_VALUE_OFF;
+    char * led_value = (status == STREAM_ON) ? LED_BRIGHTNESS_HIGH : LED_BRIGHTNESS_LOW;
+
     if (settings.streaming_status_enabled) {
         sys_gpio_write(GPIO_VALUE, settings.streaming_status_pin, gpio_value);
+    }
+
+    if (settings.streaming_status_onboard_enabled) {
+        sys_led_write(LED_BRIGHTNESS, led_value);
     }
 }
 
@@ -1800,6 +1850,7 @@ static void usage(const char *argv0)
     fprintf(stderr, "Available options are\n");
     fprintf(stderr, " -d		Do not use any real V4L2 capture device\n");
     fprintf(stderr, " -h		Print this help screen and exit\n");
+    fprintf(stderr, " -l		Use onboard led0 for streaming status indication\n");
     fprintf(stderr, " -n		Number of Video buffers (b/w 2 and 32)\n");
     fprintf(stderr,
             " -o <IO method> Select UVC IO method:\n\t"
@@ -1821,6 +1872,9 @@ static void show_settings()
     } else {
         printf("SETTINGS: GPIO pin for streaming status: not set\n");
     }
+    printf("SETTINGS: Onboard led0 used for streaming status: %s\n",
+        (settings.streaming_status_onboard_enabled) ? "ENABLED" : "DISABLED"
+    );
     printf("SETTINGS: UVC device name: %s\n", settings.uvc_devname);
     printf("SETTINGS: V4L2 device name: %s\n", settings.v4l2_devname);
 }
@@ -1836,11 +1890,15 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    while ((opt = getopt(argc, argv, "bdf:hi:m:n:o:p:r:s:t:u:v:x")) != -1) {
+    while ((opt = getopt(argc, argv, "bdlf:hi:m:n:o:p:r:s:t:u:v:x")) != -1) {
         switch (opt) {
         case 'h':
             usage(argv[0]);
             return 1;
+
+        case 'l':
+            settings.streaming_status_onboard = true;
+            break;
 
         case 'n':
             if (atoi(optarg) < 2 || atoi(optarg) > 32) {

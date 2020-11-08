@@ -8,6 +8,7 @@
     
     Available options are
         -h             Print this help screen and exit
+        -l             Use onboard led0 for streaming status indication
         -n             Number of Video buffers (b/w 2 and 32)
         -o <IO method> Select UVC IO method:
                 0 = MMAP

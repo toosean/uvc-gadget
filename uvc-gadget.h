@@ -45,6 +45,15 @@ enum gpio {
 #define GPIO_VALUE_OFF "0"
 #define GPIO_VALUE_ON "1"
 
+enum leds {
+    LED_TRIGGER = 1,
+    LED_BRIGHTNESS,
+};
+
+#define LED_TRIGGER_NONE "none"
+#define LED_BRIGHTNESS_LOW "0"
+#define LED_BRIGHTNESS_HIGH "1"
+
 #define UVC_EVENT_FIRST        (V4L2_EVENT_PRIVATE_START + 0)
 #define UVC_EVENT_CONNECT      (V4L2_EVENT_PRIVATE_START + 0)
 #define UVC_EVENT_DISCONNECT   (V4L2_EVENT_PRIVATE_START + 1)
@@ -221,6 +230,8 @@ struct uvc_settings {
     enum io_method uvc_io_method;
     unsigned int nbufs;
     bool show_fps;
+    bool streaming_status_onboard;
+    bool streaming_status_onboard_enabled;
     char * streaming_status_pin;
     bool streaming_status_enabled;
 };
@@ -231,6 +242,8 @@ struct uvc_settings settings = {
     .uvc_io_method = IO_METHOD_USERPTR,
     .nbufs = 2,
     .show_fps = false,
+    .streaming_status_onboard = false,
+    .streaming_status_onboard_enabled = false,
     .streaming_status_enabled = false,
 };
 
