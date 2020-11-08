@@ -276,8 +276,6 @@ static int v4l2_init_buffers(struct v4l2_device *dev, struct v4l2_requestbuffers
         }
         return ret;
     }
-    // printf("%s: %u buffers allocated.\n", dev->device_type_name, count);
-    // dev->nbufs = req->count;
     return count;
 }
 
@@ -384,6 +382,9 @@ static int v4l2_reqbufs(struct v4l2_device *dev, int nbufs)
 {
     int ret = 0;
 
+    dev->dqbuf_count = 0;
+    dev->qbuf_count = 0;
+
     switch (dev->io) {
     case IO_METHOD_MMAP:
         ret = v4l2_reqbufs_mmap(dev, nbufs);
@@ -447,29 +448,22 @@ static int v4l2_qbuf(struct v4l2_device *dev)
     return ret;
 }
 
-static int v4l2_process_data(struct v4l2_device *dev)
+static void v4l2_process_data(struct v4l2_device *dev)
 {
-    int ret;
     struct v4l2_buffer vbuf;
     struct v4l2_buffer ubuf;
 
-    /* Return immediately if V4l2 streaming has not yet started. */
-    if (!dev->is_streaming ) {
-        return 0;
-    }
-
     if (dev->udev->is_streaming && dev->dqbuf_count >= dev->qbuf_count) {
-        return 0;
+        return;
     }
 
     /* Dequeue spent buffer from V4L2 domain. */
     CLEAR(vbuf);
     vbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    vbuf.memory = (dev->io == IO_METHOD_USERPTR) ? V4L2_MEMORY_USERPTR : V4L2_MEMORY_MMAP;
+    vbuf.memory = dev->memory_type;
 
-    ret = ioctl(dev->fd, VIDIOC_DQBUF, &vbuf);
-    if (ret < 0) {
-        return ret;
+    if (ioctl(dev->fd, VIDIOC_DQBUF, &vbuf) < 0) {
+        return;
     }
 
     dev->dqbuf_count++;
@@ -495,16 +489,14 @@ static int v4l2_process_data(struct v4l2_device *dev)
         ubuf.bytesused = vbuf.bytesused;
         break;
     }
-    ret = ioctl(dev->udev->fd, VIDIOC_QBUF, &ubuf);
-    if (ret < 0) {
+
+    if (ioctl(dev->udev->fd, VIDIOC_QBUF, &ubuf) < 0) {
         /* Check for a USB disconnect/shutdown event. */
         if (errno == ENODEV) {
             dev->udev->uvc_shutdown_requested = 1;
             printf("UVC: Possible USB shutdown requested from Host, seen during VIDIOC_QBUF\n");
-            return 0;
-        } else {
-            return ret;
         }
+        return;
     }
 
     dev->udev->qbuf_count++;
@@ -513,7 +505,6 @@ static int v4l2_process_data(struct v4l2_device *dev)
         v4l2_video_stream(dev->udev, STREAM_ON);
 
     }
-    return 0;
 }
 
 /* ---------------------------------------------------------------------------
@@ -567,7 +558,7 @@ static int v4l2_apply_format(struct v4l2_device *dev, unsigned int pixelformat,
     int ret = -EINVAL;
 
     if (dev->is_streaming) {
-        return -1;
+        return ret;
     }
 
     CLEAR(fmt);
@@ -577,11 +568,6 @@ static int v4l2_apply_format(struct v4l2_device *dev, unsigned int pixelformat,
     fmt.fmt.pix.sizeimage = get_frame_size(pixelformat, width, height);
     fmt.fmt.pix.pixelformat = pixelformat;
     fmt.fmt.pix.field = V4L2_FIELD_ANY;
-
-    // ret = v4l2_get_format(dev);
-    // if (ret < 0) {
-    //     return ret;
-    // }
 
     ret = v4l2_set_format(dev, &fmt);
     if (ret < 0) {
@@ -636,12 +622,10 @@ static void v4l2_set_ctrl(struct v4l2_device *dev, struct control_mapping_pair c
 
     if (ctrl.value < ctrl.minimum) {
         ctrl.value = ctrl.minimum;
-
     }
 
     if (ctrl.value > ctrl.maximum) {
         ctrl.value = ctrl.maximum;
-
     }
 
     v4l2_ctrl_value = (ctrl.value - ctrl.minimum) * v4l2_diff / ctrl_diff + ctrl.v4l2_minimum;
@@ -650,7 +634,6 @@ static void v4l2_set_ctrl(struct v4l2_device *dev, struct control_mapping_pair c
 
     if (ctrl.v4l2 == V4L2_CID_RED_BALANCE) {
         v4l2_set_ctrl_value(dev, ctrl, V4L2_CID_BLUE_BALANCE, v4l2_ctrl_value);
-
     }
 }
 
@@ -771,54 +754,23 @@ static void uvc_video_process(struct v4l2_device *dev)
 {
     struct v4l2_buffer ubuf;
     struct v4l2_buffer vbuf;
-    unsigned int i;
-    /*
-     * Return immediately if UVC video output device has not started
-     * streaming yet.
-     */
-    if (!dev->is_streaming) {
-        return;
-    }
-    /* UVC - V4L2 integrated path. */
-
-    /*
-     * Return immediately if V4L2 video capture device has not
-     * started streaming yet or if QBUF was not called even once on
-     * the UVC side.
-     */
-    if (!dev->vdev->is_streaming || !dev->is_streaming) {
-        return;
-    }
-
     /*
      * Do not dequeue buffers from UVC side until there are atleast
      * 2 buffers available at UVC domain.
      */
-    if (!dev->uvc_shutdown_requested) {
-        if ((dev->dqbuf_count + 1) >= dev->qbuf_count) {
-            return;
-        }
+    if (!dev->uvc_shutdown_requested && ((dev->dqbuf_count + 1) >= dev->qbuf_count)) {
+        return;
     }
 
     /* Prepare a v4l2 buffer to be dequeued from UVC domain. */
     CLEAR(ubuf);
     ubuf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-    ubuf.memory = (dev->io == IO_METHOD_MMAP) ? V4L2_MEMORY_MMAP : V4L2_MEMORY_USERPTR;
+    ubuf.memory = dev->memory_type;
 
     /* Dequeue the spent buffer from UVC domain */
     if (ioctl(dev->fd, VIDIOC_DQBUF, &ubuf) < 0) {
         printf("UVC: Unable to dequeue buffer: %s (%d).\n", strerror(errno), errno);
         return;
-    }
-
-    if (dev->io == IO_METHOD_USERPTR) {
-        for (i = 0; i < dev->nbufs; ++i) {
-            if (ubuf.m.userptr == (unsigned long)dev->vdev->mem[i].start &&
-                ubuf.length == dev->vdev->mem[i].length
-            ) {
-                break;
-            }
-        }
     }
 
     dev->dqbuf_count++;
@@ -839,7 +791,6 @@ static void uvc_video_process(struct v4l2_device *dev)
 
     /* Queue the buffer to V4L2 domain */
     CLEAR(vbuf);
-
     vbuf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     vbuf.memory = V4L2_MEMORY_MMAP;
     vbuf.index = ubuf.index;
@@ -970,12 +921,13 @@ static int uvc_get_frame_format(struct uvc_frame_format ** frame_format,
 
 static void uvc_dump_frame_format(struct uvc_frame_format * frame_format, const char * title)
 {
-    printf("%s: format: %d, frame: %d, resolution: %dx%d, bitrate: [%d, %d]\n",
+    printf("%s: format: %d, frame: %d, resolution: %dx%d, frame_interval: %d,  bitrate: [%d, %d]\n",
         title,
         frame_format->bFormatIndex,
         frame_format->bFrameIndex,
         frame_format->wWidth,
         frame_format->wHeight,
+        frame_format->dwDefaultFrameInterval,
         frame_format->dwMinBitRate,
         frame_format->dwMaxBitRate
     );
@@ -990,6 +942,7 @@ static void uvc_fill_streaming_control(struct v4l2_device *dev, struct uvc_strea
     int frame_last;
     int format_frame_first;
     int format_frame_last;
+    unsigned int frame_interval;
 
     switch (action) {
     case STREAM_CONTROL_INIT:
@@ -1038,21 +991,19 @@ static void uvc_fill_streaming_control(struct v4l2_device *dev, struct uvc_strea
 
     uvc_dump_frame_format(frame_format, "FRAME");
 
-    memset(ctrl, 0, sizeof *ctrl);
+    if (frame_format->dwDefaultFrameInterval >= 100000) {
+        frame_interval = frame_format->dwDefaultFrameInterval;
+    } else {
+        frame_interval = 400000;
+    }
 
+    memset(ctrl, 0, sizeof *ctrl);
     ctrl->bmHint = 1; 
     ctrl->bFormatIndex = iformat;
     ctrl->bFrameIndex = iframe;
     ctrl->dwMaxVideoFrameSize = get_frame_size(frame_format->video_format, frame_format->wWidth, frame_format->wHeight);
-    
-    if (frame_format->dwDefaultFrameInterval >= 100000) {
-        ctrl->dwFrameInterval = frame_format->dwDefaultFrameInterval;
-    } else {
-        ctrl->dwFrameInterval = 400000;
-    }
-
     ctrl->dwMaxPayloadTransferSize = streaming_maxpacket;
-
+    ctrl->dwFrameInterval = frame_interval;
     ctrl->bmFramingInfo = 3;
     ctrl->bMinVersion = format_first;
     ctrl->bMaxVersion = format_last;
@@ -1062,7 +1013,6 @@ static void uvc_fill_streaming_control(struct v4l2_device *dev, struct uvc_strea
 
     if (dev->control == UVC_VS_COMMIT_CONTROL && action == STREAM_CONTROL_SET) {
         v4l2_apply_format(dev->vdev, frame_format->video_format, frame_format->wWidth, frame_format->wHeight);
-
     }
 }
 
@@ -1162,7 +1112,7 @@ static void uvc_events_process_streaming(struct v4l2_device *dev, uint8_t req, u
         return;
     }
 
-    struct uvc_streaming_control * ctrl = (struct uvc_streaming_control *)&resp->data;
+    struct uvc_streaming_control * ctrl = (struct uvc_streaming_control *) &resp->data;
     struct uvc_streaming_control * target = (cs == UVC_VS_PROBE_CONTROL) ? &dev->probe : &dev->commit;
 
     int ctrl_length = sizeof * ctrl;
@@ -1424,6 +1374,7 @@ static void processing_loop_video(struct v4l2_device * udev, struct v4l2_device 
         if (FD_ISSET(udev->fd, &efds)) {
             uvc_events_process(udev);
         }
+        
         if (vdev->is_streaming) {
 
             if (FD_ISSET(udev->fd, &dfds)) {
@@ -1443,10 +1394,9 @@ static void processing_loop_video(struct v4l2_device * udev, struct v4l2_device 
             if (FD_ISSET(vdev->fd, &fdsv)) {
                 v4l2_process_data(vdev);
             }
-        }
 
-        // // fix from - https://github.com/kinweilee/v4l2-mmal-uvc/blob/master/v4l2-mmal-uvc.c
-        if (!vdev->is_streaming && !udev->is_streaming) {
+        } else {
+            // fix from - https://github.com/kinweilee/v4l2-mmal-uvc/blob/master/v4l2-mmal-uvc.c
             nanosleep ((const struct timespec[]) { {0, 1000000L} }, NULL);
         }
     }
@@ -1486,7 +1436,17 @@ int init()
      * IO methods used at UVC and V4L2 domains must be
      * complementary to avoid any memcpy from the CPU.
      */
-    vdev->io = (settings.uvc_io_method == IO_METHOD_MMAP) ? IO_METHOD_USERPTR : IO_METHOD_MMAP;
+    if (udev->io == IO_METHOD_MMAP) {
+        vdev->io = IO_METHOD_USERPTR;
+        vdev->memory_type = V4L2_MEMORY_USERPTR;
+        udev->memory_type = V4L2_MEMORY_MMAP;
+
+    } else {
+        vdev->io = IO_METHOD_MMAP;
+        vdev->memory_type = V4L2_MEMORY_MMAP;
+        udev->memory_type = V4L2_MEMORY_USERPTR;
+
+    }  
     
     /* Init UVC events. */
     uvc_events_init(udev);
@@ -1609,7 +1569,7 @@ static void configfs_fill_formats(const char* path, const char * part)
             usb_speed = USB_SPEED_SUPER;
 
         } else {
-            printf("UNSUPPORTED USB SPEED: (%s) %s\n", array[0], path);
+            printf("CONFIGFS: Unsupported USB speed: (%s) %s\n", array[0], path);
             goto free;
 
         }
@@ -1621,7 +1581,7 @@ static void configfs_fill_formats(const char* path, const char * part)
             video_format = V4L2_PIX_FMT_YUYV;
 
         } else {
-            printf("UNSUPPORTED FORMAT: (%s) %s\n", array[2], path);
+            printf("CONFIGFS: Unsupported format: (%s) %s\n", array[2], path);
             goto free;
         }
 
@@ -1775,7 +1735,7 @@ static void usage(const char *argv0)
     fprintf(stderr, " -x show fps information\n");
 }
 
-static void check_settings()
+static void show_settings()
 {
     printf("SETTINGS: Number of buffers requested: %d\n", settings.nbufs);
     printf("SETTINGS: Show FPS: %s\n", (settings.show_fps) ? "ENABLED" : "DISABLED");
@@ -1835,7 +1795,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    check_settings();
+    show_settings();
     return init();
 
 err:

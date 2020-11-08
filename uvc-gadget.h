@@ -14,17 +14,8 @@
 #include <linux/types.h>
 #include <linux/usb/ch9.h>
 
-#define WIDTH  640
-#define HEIGHT 480
-
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 #define max(a, b) (((a) > (b)) ? (a) : (b))
-
-#define BITSET(x, mask) (x |= mask)
-#define BITCLEAR(x, mask) (x &= ~(mask))
-
-#define STATE_OK 0
-#define STATE_FAILED 1
 
 #define clamp(val, min, max)                        \
     ({                                              \
@@ -182,6 +173,7 @@ struct v4l2_device {
     struct buffer *mem;
     unsigned int nbufs;
     unsigned int buffer_type;
+    unsigned int memory_type;
 
     /* v4l2 buffer queue and dequeue counters */
     unsigned long long int qbuf_count;
