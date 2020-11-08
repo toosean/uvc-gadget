@@ -54,6 +54,78 @@
 
 #include "uvc-gadget.h"
 
+static int sys_gpio_write(unsigned int type, char pin[], char value[])
+{
+    FILE * sys_file;
+    char path[255];
+
+    strcpy(path, "/sys/class/gpio/");
+
+    switch(type) {
+        case GPIO_EXPORT:
+            strcat(path, "export");
+            value = pin;
+            break;
+
+        case GPIO_DIRECTION:
+            strcat(path, "gpio");
+            strcat(path, pin);
+            strcat(path, "/direction");
+            break;
+
+        case GPIO_VALUE:
+            strcat(path, "gpio");
+            strcat(path, pin);
+            strcat(path, "/value");
+            break;
+    }
+
+    printf("GPIO WRITE: Path: %s, Value: %s\n", path, value);
+
+    sys_file = fopen(path, "w");
+    if (!sys_file) {
+        printf("GPIO ERROR: File write failed: %s (%d).\n", strerror(errno), errno);
+        return -1;
+    }
+
+    fwrite(value, 1, strlen(value), sys_file);
+    fclose(sys_file);
+   
+    return 0;
+}
+
+static void streaming_status_enable()
+{
+    int ret;
+    if (!settings.streaming_status_enabled && settings.streaming_status_pin) {
+        ret = sys_gpio_write(GPIO_EXPORT, settings.streaming_status_pin, NULL);
+        if (ret < 0) {
+            return;
+        }
+
+        ret = sys_gpio_write(GPIO_DIRECTION, settings.streaming_status_pin, GPIO_DIRECTION_OUT);
+        if (ret < 0) {
+            return;
+        }
+
+        ret = sys_gpio_write(GPIO_VALUE, settings.streaming_status_pin, GPIO_VALUE_OFF);
+        if (ret < 0) {
+            return;
+        }
+
+        settings.streaming_status_enabled = true;
+    }
+    return;
+}
+
+static void streaming_status_value(enum video_stream_action status)
+{
+    char * gpio_value = (status == STREAM_ON) ? GPIO_VALUE_ON : GPIO_VALUE_OFF;
+    if (settings.streaming_status_enabled) {
+        sys_gpio_write(GPIO_VALUE, settings.streaming_status_pin, gpio_value);
+    }
+}
+
 static char * uvc_request_code_name(unsigned int uvc_control)
 {
     switch (uvc_control) {
@@ -503,7 +575,7 @@ static void v4l2_process_data(struct v4l2_device *dev)
 
     if (!dev->udev->is_streaming) {
         v4l2_video_stream(dev->udev, STREAM_ON);
-
+        streaming_status_value((dev->udev->is_streaming) ? STREAM_ON : STREAM_OFF);
     }
 }
 
@@ -845,6 +917,7 @@ static void uvc_handle_streamoff_event(struct v4l2_device *dev)
 {
     v4l2_device_stream_off(dev->vdev);
     v4l2_device_stream_off(dev);
+    streaming_status_value((dev->is_streaming) ? STREAM_ON : STREAM_OFF);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1407,6 +1480,8 @@ int init()
     struct v4l2_device *udev;
     struct v4l2_device *vdev;
 
+    streaming_status_enable();
+
     /* Open the UVC device. */
     udev = v4l2_open(settings.uvc_devname, DEVICE_TYPE_UVC);
     if (udev == NULL) {
@@ -1730,6 +1805,7 @@ static void usage(const char *argv0)
             " -o <IO method> Select UVC IO method:\n\t"
             "0 = MMAP\n\t"
             "1 = USER_PTR\n");
+    fprintf(stderr, " -p GPIO pin number for streaming status indication\n");
     fprintf(stderr, " -u device	UVC Video Output device\n");
     fprintf(stderr, " -v device	V4L2 Video Capture device\n");
     fprintf(stderr, " -x show fps information\n");
@@ -1740,6 +1816,11 @@ static void show_settings()
     printf("SETTINGS: Number of buffers requested: %d\n", settings.nbufs);
     printf("SETTINGS: Show FPS: %s\n", (settings.show_fps) ? "ENABLED" : "DISABLED");
     printf("SETTINGS: IO method requested: %s\n", (settings.uvc_io_method == IO_METHOD_MMAP) ? "MMAP" : "USER_PTR");
+    if (settings.streaming_status_pin) {
+        printf("SETTINGS: GPIO pin for streaming status: %s\n", settings.streaming_status_pin);
+    } else {
+        printf("SETTINGS: GPIO pin for streaming status: not set\n");
+    }
     printf("SETTINGS: UVC device name: %s\n", settings.uvc_devname);
     printf("SETTINGS: V4L2 device name: %s\n", settings.v4l2_devname);
 }
@@ -1755,7 +1836,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    while ((opt = getopt(argc, argv, "bdf:hi:m:n:o:r:s:t:u:v:x")) != -1) {
+    while ((opt = getopt(argc, argv, "bdf:hi:m:n:o:p:r:s:t:u:v:x")) != -1) {
         switch (opt) {
         case 'h':
             usage(argv[0]);
@@ -1775,6 +1856,10 @@ int main(int argc, char *argv[])
                 goto err;
             }
             settings.uvc_io_method = (atoi(optarg) == 0) ? IO_METHOD_MMAP : IO_METHOD_USERPTR;
+            break;
+
+        case 'p':
+            settings.streaming_status_pin = optarg;
             break;
 
         case 'u':

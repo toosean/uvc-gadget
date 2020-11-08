@@ -12,6 +12,7 @@
         -o <IO method> Select UVC IO method:
                 0 = MMAP
                 1 = USER_PTR
+        -p             GPIO pin number for streaming status indication
         -u device      UVC Video Output device
         -v device      V4L2 Video Capture device
 

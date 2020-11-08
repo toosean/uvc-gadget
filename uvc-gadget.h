@@ -31,6 +31,20 @@
 #define ARRAY_SIZE(a) ((sizeof(a) / sizeof(a[0])))
 #define pixfmtstr(x) (x) & 0xff, ((x) >> 8) & 0xff, ((x) >> 16) & 0xff, ((x) >> 24) & 0xff
 
+enum gpio {
+    GPIO_EXPORT = 0,
+    GPIO_DIRECTION,
+    GPIO_VALUE,
+};
+
+#define GPIO_DIRECTION_OUT "out"
+#define GPIO_DIRECTION_IN "in"
+#define GPIO_DIRECTION_LOW "low"
+#define GPIO_DIRECTION_HIGH "high"
+
+#define GPIO_VALUE_OFF "0"
+#define GPIO_VALUE_ON "1"
+
 #define UVC_EVENT_FIRST        (V4L2_EVENT_PRIVATE_START + 0)
 #define UVC_EVENT_CONNECT      (V4L2_EVENT_PRIVATE_START + 0)
 #define UVC_EVENT_DISCONNECT   (V4L2_EVENT_PRIVATE_START + 1)
@@ -207,6 +221,8 @@ struct uvc_settings {
     enum io_method uvc_io_method;
     unsigned int nbufs;
     bool show_fps;
+    char * streaming_status_pin;
+    bool streaming_status_enabled;
 };
 
 struct uvc_settings settings = {
@@ -215,6 +231,7 @@ struct uvc_settings settings = {
     .uvc_io_method = IO_METHOD_USERPTR,
     .nbufs = 2,
     .show_fps = false,
+    .streaming_status_enabled = false,
 };
 
 struct control_mapping_pair {
