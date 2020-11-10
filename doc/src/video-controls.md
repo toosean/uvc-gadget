@@ -12,7 +12,7 @@ These settings are located in file [drivers/usb/gadget/function/f_uvc.c](https:/
 And a value of **bmControls** field must be changed.
 
 ### Default values
-```
+``` c
 	cd = &opts->uvc_camera_terminal;
 	cd->bLength                     = UVC_DT_CAMERA_TERMINAL_SIZE(3);
 	cd->bDescriptorType             = USB_DT_CS_INTERFACE;
@@ -127,7 +127,7 @@ A bit set to 1 indicates that the mentioned Control is supported for the video s
 |D15|0|Digital Multiplier Limit|
 |pd->bmControls[1]| = 6||
 
-```
+``` c
 	pd = &opts->uvc_processing;
 	pd->bLength                     = UVC_DT_PROCESSING_UNIT_SIZE(2);
 	pd->bDescriptorType             = USB_DT_CS_INTERFACE;

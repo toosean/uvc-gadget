@@ -6,7 +6,7 @@ Everything you wanted to know about uvc-gadget
 
 ## How to configure USB gadget with UVC Camera support (configfs)
 
-TODO [USB gadget with UVC camera - configfs](src/configfs.md)
+[USB gadget with UVC camera - configfs](src/configfs.md)
 
 ## How to define frame resolutions
 
