@@ -1472,8 +1472,16 @@ static void processing_loop_video(struct v4l2_device * udev, struct v4l2_device 
         if (vdev->is_streaming) {
             /* ..but only data events on V4L2 interface */
             FD_SET(vdev->fd, &fdsv);
-
+		
+	    /* yield CPU to other processes and avoid spinlock when camera is not being used */
+            tv.tv_sec = 0;
+            tv.tv_usec = 1 * 1000000;
+            nanosleep(&tv, &tv); 
+            /* New timeout. */
+            tv.tv_sec = 1;
+            tv.tv_usec = 0;
             nfds = max(vdev->fd, udev->fd);
+		
             activity = select(nfds + 1, &fdsv, &dfds, &efds, &tv);
 
             if (activity == 0) {
