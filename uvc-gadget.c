@@ -1464,8 +1464,13 @@ static void processing_loop_video(struct v4l2_device * udev, struct v4l2_device 
         fd_set efds = fdsu;
         fd_set dfds = fdsu;
 
+        /* yield CPU to other processes and avoid spinlock when camera is not being used */
+        // fix from - https://github.com/kinweilee/v4l2-mmal-uvc/blob/master/v4l2-mmal-uvc.c
+        // rcarmo - https://github.com/peterbay/uvc-gadget/pull/6
+        nanosleep ((const struct timespec[]) { {0, 1000000L} }, NULL);
+
         /* Timeout. */
-        tv.tv_sec = 2;
+        tv.tv_sec = 1;
         tv.tv_usec = 0;
 
         // don't block vdev device if streaming is off
@@ -1473,15 +1478,7 @@ static void processing_loop_video(struct v4l2_device * udev, struct v4l2_device 
             /* ..but only data events on V4L2 interface */
             FD_SET(vdev->fd, &fdsv);
 		
-	    /* yield CPU to other processes and avoid spinlock when camera is not being used */
-            tv.tv_sec = 0;
-            tv.tv_usec = 1 * 1000000;
-            nanosleep(&tv, &tv); 
-            /* New timeout. */
-            tv.tv_sec = 1;
-            tv.tv_usec = 0;
             nfds = max(vdev->fd, udev->fd);
-		
             activity = select(nfds + 1, &fdsv, &dfds, &efds, &tv);
 
             if (activity == 0) {
@@ -1525,10 +1522,6 @@ static void processing_loop_video(struct v4l2_device * udev, struct v4l2_device 
             if (FD_ISSET(vdev->fd, &fdsv)) {
                 v4l2_process_data(vdev);
             }
-
-        } else {
-            // fix from - https://github.com/kinweilee/v4l2-mmal-uvc/blob/master/v4l2-mmal-uvc.c
-            nanosleep ((const struct timespec[]) { {0, 1000000L} }, NULL);
         }
     }
 }
