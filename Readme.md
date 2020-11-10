@@ -1,6 +1,7 @@
-## uvc-gadget
+# uvc-gadget
 
-
+## Documentation
+[New documentation for uvc-gadget](doc/Readme.md)
 
 ## How to use
 

@@ -1,11 +1,25 @@
-## Documentation
+# uvc-gadget - documentation
 
-- [linux/Documentation/usb/gadget-testing.txt](https://github.com/torvalds/linux/blob/master/Documentation/usb/gadget-testing.txt)
+Everything you wanted to know about uvc-gadget
 
-- [linux/Documentation/usb/gadget_configfs.txt](https://github.com/torvalds/linux/blob/master/Documentation/usb/gadget_configfs.txt)
+/ UNDER CONSTRUCTION /
 
-- [configfs_start](http://www.spinics.net/lists/linux-usb/msg76388.html)
+## How to configure USB gadget with UVC Camera support (configfs)
 
-- [usb gadget](https://github.com/torvalds/linux/tree/master/Documentation/usb)
+TODO [USB gadget with UVC camera - configfs](src/configfs.md)
 
-- [configfs](https://github.com/torvalds/linux/tree/master/Documentation/filesystems/configfs)
+## How to define frame resolutions
+
+TODO [Frame resolutions](src/frame-resolution.md)
+
+## How to enable more video controls
+
+[Extended set of video controls](src/video-controls.md)
+
+## How to run uvc-gadget
+
+[uvc-gadget command line arguments](src/cmdline-arguments.md)
+
+## How looks stdout from uvc-gadget
+
+[Sample stdout from uvc-gadget](src/sample-stdout.md)
