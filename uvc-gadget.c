@@ -390,18 +390,18 @@ static int v4l2_video_stream(struct v4l2_device * dev, enum video_stream_action 
 }
 
 static int v4l2_init_buffers(struct v4l2_device *dev, struct v4l2_requestbuffers * req,
-    unsigned int count, unsigned int type, unsigned int memory)
+    unsigned int count)
 {
     int ret;
     req->count = count;
-    req->type = type;
-    req->memory = memory;
+    req->type = dev->buffer_type;
+    req->memory = dev->memory_type;
 
     ret = ioctl(dev->fd, VIDIOC_REQBUFS, req);
     if (ret < 0) {
         if (ret == -EINVAL) {
             printf("%s: Does not support %s\n", dev->device_type_name,
-                (memory == V4L2_MEMORY_USERPTR) ? "user pointer i/o" : "memory mapping");
+                (dev->memory_type == V4L2_MEMORY_USERPTR) ? "user pointer i/o" : "memory mapping");
 
         } else {
             printf("%s: VIDIOC_REQBUFS error: %s (%d).\n",
@@ -413,27 +413,10 @@ static int v4l2_init_buffers(struct v4l2_device *dev, struct v4l2_requestbuffers
     return count;
 }
 
-static int v4l2_reqbufs_mmap(struct v4l2_device *dev, int nbufs)
+static int v4l2_reqbufs_mmap(struct v4l2_device *dev, struct v4l2_requestbuffers req)
 {
-    struct v4l2_requestbuffers req;
-    unsigned int i = 0;
     int ret;
-    CLEAR(req);
-
-    ret = v4l2_init_buffers(dev, &req, nbufs, dev->buffer_type, V4L2_MEMORY_MMAP);
-    if (ret < 1) {
-        return ret;
-    }
-
-    if (!req.count) {
-        return 0;
-    }
-
-    if (req.count < 2) {
-        printf("%s: Insufficient buffer memory.\n", dev->device_type_name);
-        ret = -EINVAL;
-        goto err;
-    }
+    unsigned int i = 0;
 
     /* Map the buffers. */
     dev->mem = calloc(req.count, sizeof dev->mem[0]);
@@ -481,9 +464,6 @@ static int v4l2_reqbufs_mmap(struct v4l2_device *dev, int nbufs)
             dev->device_type_name, i, dev->mem[i].start, dev->mem[i].length);
     }
 
-    dev->nbufs = req.count;
-    printf("%s: %u buffers allocated.\n", dev->device_type_name, req.count);
-
     return 0;
 
 err_free:
@@ -492,13 +472,16 @@ err:
     return ret;
 }
 
-static int v4l2_reqbufs_userptr(struct v4l2_device *dev, int nbufs)
+static int v4l2_reqbufs(struct v4l2_device *dev, int nbufs)
 {
+    int ret = 0;
     struct v4l2_requestbuffers req;
-    int ret;
     CLEAR(req);
 
-    ret = v4l2_init_buffers(dev, &req, nbufs, dev->buffer_type, V4L2_MEMORY_USERPTR);
+    dev->dqbuf_count = 0;
+    dev->qbuf_count = 0;
+
+    ret = v4l2_init_buffers(dev, &req, nbufs);
     if (ret < 1) {
         return ret;
     }
@@ -507,31 +490,20 @@ static int v4l2_reqbufs_userptr(struct v4l2_device *dev, int nbufs)
         return 0;
     }
 
+    if (dev->memory_type == V4L2_MEMORY_MMAP) {
+        if (req.count < 2) {
+            printf("%s: Insufficient buffer memory.\n", dev->device_type_name);
+            return -EINVAL;
+        }
+
+        ret = v4l2_reqbufs_mmap(dev, req);
+        if (ret < 0) {
+            return -EINVAL;
+        }
+    }
+
     dev->nbufs = req.count;
     printf("%s: %u buffers allocated.\n", dev->device_type_name, req.count);
-    return 0;
-}
-
-static int v4l2_reqbufs(struct v4l2_device *dev, int nbufs)
-{
-    int ret = 0;
-
-    dev->dqbuf_count = 0;
-    dev->qbuf_count = 0;
-
-    switch (dev->memory_type) {
-    case V4L2_MEMORY_MMAP:
-        ret = v4l2_reqbufs_mmap(dev, nbufs);
-        break;
-
-    case V4L2_MEMORY_USERPTR:
-        ret = v4l2_reqbufs_userptr(dev, nbufs);
-        break;
-
-    default:
-        ret = -EINVAL;
-        break;
-    }
 
     return ret;
 }
@@ -558,28 +530,6 @@ static int v4l2_qbuf_mmap(struct v4l2_device * dev)
         dev->qbuf_count++;
     }
     return 0;
-}
-
-static int v4l2_qbuf(struct v4l2_device *dev)
-{
-    int ret = 0;
-
-    switch (dev->memory_type) {
-    case V4L2_MEMORY_MMAP:
-        ret = v4l2_qbuf_mmap(dev);
-        break;
-
-    case V4L2_MEMORY_USERPTR:
-        /* Empty. */
-        ret = 0;
-        break;
-
-    default:
-        ret = -EINVAL;
-        break;
-    }
-
-    return ret;
 }
 
 static void v4l2_process_data(struct v4l2_device *dev)
@@ -935,18 +885,12 @@ static void uvc_handle_streamon_event(struct v4l2_device *dev)
         return;
     }
 
-    if (v4l2_qbuf(dev->vdev) < 0) {
+    if (v4l2_qbuf_mmap(dev->vdev) < 0) {
         return;
     }
 
     /* Start V4L2 capturing now. */
     if (v4l2_video_stream(dev->vdev, STREAM_ON) < 0) {
-        return;
-    }
-
-    /* Common setup. */
-    /* Queue buffers to UVC domain and start streaming. */
-    if (v4l2_qbuf(dev) < 0) {
         return;
     }
 }
