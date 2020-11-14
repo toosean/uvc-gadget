@@ -1611,7 +1611,7 @@ static int find_text_pos(const char *s, const char *f)
   return (p) ? p - s : 0;
 }
 
-static int read_value(const char * path)
+static int configfs_read_value(const char * path)
 {
     char buf[20];
     int fd;
@@ -1644,52 +1644,73 @@ static void set_uvc_format_index(enum usb_device_speed usb_speed, int video_form
     }
 }
 
-static int check_uvc_format_key_word(const char * key_word)
+static void set_uvc_format_value(const char * key_word, unsigned int index, int value)
 {
     if (!strncmp(key_word, "dwDefaultFrameInterval", 22)) {
-        return UVC_FORMAT_DWDEFAULTFRAMEINTERVAL;
+        uvc_frame_format[index].dwDefaultFrameInterval = value;
 
     } else if (!strncmp(key_word, "dwMaxVideoFrameBufferSize", 25)) {
-        return UVC_FORMAT_DWMAXVIDEOFRAMEBUFFERSIZE;
+        uvc_frame_format[index].dwMaxVideoFrameBufferSize = value;
 
     } else if (!strncmp(key_word, "dwMaxBitRate", 12)) {
-        return UVC_FORMAT_DWMAXBITRATE;
+        uvc_frame_format[index].dwMaxBitRate = value;
 
     } else if (!strncmp(key_word, "dwMinBitRate", 12)) {
-        return UVC_FORMAT_DWMINBITRATE;
+        uvc_frame_format[index].dwMinBitRate = value;
 
     } else if (!strncmp(key_word, "wHeight", 7)) {
-        return UVC_FORMAT_WHEIGHT;
+        uvc_frame_format[index].wHeight = value;
 
     } else if (!strncmp(key_word, "wWidth", 6)) {
-        return UVC_FORMAT_WWIDTH;
+        uvc_frame_format[index].wWidth = value;
 
     } else if (!strncmp(key_word, "bmCapabilities", 14)) {
-        return UVC_FORMAT_BMCAPABILITIES;
+        uvc_frame_format[index].bmCapabilities = value;
 
     } else if (!strncmp(key_word, "bFrameIndex", 11)) {
-        return UVC_FORMAT_BFRAMEINDEX;
-
-    } else if (!strncmp(key_word, "bFormatIndex", 12)) {
-        return UVC_FORMAT_BFORMATINDEX;
+        uvc_frame_format[index].bFrameIndex = value;
 
     }
-    return UVC_FORMAT_UNKNOWN;
 }
 
-static void configfs_fill_formats(const char* path, const char * part)
+static int configfs_usb_speed(const char * speed)
 {
-    char * token;
-    int index;
-    int value;
+    if (!strncmp(speed, "fs", 2)) {
+        return USB_SPEED_FULL;
+
+    } else if (!strncmp(speed, "hs", 2)) {
+        return USB_SPEED_HIGH;
+
+    } else if (!strncmp(speed, "ss", 2)) {
+        return USB_SPEED_SUPER;
+
+    }
+    return USB_SPEED_UNKNOWN;
+}
+
+static int configfs_video_format(const char * format)
+{
+    if (!strncmp(format, "m", 1)) {
+        return V4L2_PIX_FMT_MJPEG;
+
+    } else if (!strncmp(format, "u", 1)) {
+        return V4L2_PIX_FMT_YUYV;
+
+    }
+    return 0;
+}
+
+static void configfs_fill_formats(const char * path, const char * part)
+{
+    int index = 0;
+    int value = 0;
     enum usb_device_speed usb_speed;
     int video_format;
     const char * format_name;
     char * copy = strdup(part);
-
+    char * token = strtok(copy, "/");
     char * array[10];
-    index = 0;
-    token = strtok(copy, "/");
+    
     while (token != NULL)
     {
         array[index++] = token;
@@ -1697,46 +1718,31 @@ static void configfs_fill_formats(const char* path, const char * part)
     }
 
     if (index > 3) {
-        int key_word = check_uvc_format_key_word(array[index - 1]);
         format_name = array[3];
-        if (key_word == UVC_FORMAT_UNKNOWN) {
-            goto free;
-        }
 
-        if (!strncmp(array[0], "fs", 2)) {
-            usb_speed = USB_SPEED_FULL;
-
-        } else if (!strncmp(array[0], "hs", 2)) {
-            usb_speed = USB_SPEED_HIGH;
-
-        } else if (!strncmp(array[0], "ss", 2)) {
-            usb_speed = USB_SPEED_SUPER;
-
-        } else {
+        usb_speed = configfs_usb_speed(array[0]);
+        if (usb_speed == USB_SPEED_UNKNOWN) {
             printf("CONFIGFS: Unsupported USB speed: (%s) %s\n", array[0], path);
             goto free;
-
         }
 
-        if (!strncmp(array[2], "m", 1)) {
-            video_format = V4L2_PIX_FMT_MJPEG;
-
-        } else if (!strncmp(array[2], "u", 1)) {
-            video_format = V4L2_PIX_FMT_YUYV;
-
-        } else {
+        video_format = configfs_video_format(array[2]);
+        if (video_format == 0) {
             printf("CONFIGFS: Unsupported format: (%s) %s\n", array[2], path);
             goto free;
         }
 
-        value = read_value(path);
-
+        value = configfs_read_value(path);
         if (value < 0) {
             goto free;
         }
 
-        if (key_word == UVC_FORMAT_BFORMATINDEX) {
+        if (!strncmp(array[index - 1], "bFormatIndex", 12)) {
             set_uvc_format_index(usb_speed, video_format, value);
+            goto free;
+        }
+
+        if (index != 5) {
             goto free;
         }
 
@@ -1745,7 +1751,6 @@ static void configfs_fill_formats(const char* path, const char * part)
             uvc_frame_format[last_format_index].video_format != video_format ||
             strncmp(uvc_frame_format[last_format_index].format_name, format_name, strlen(format_name))
         ) {
-
             if (uvc_frame_format[last_format_index].defined) {
                 last_format_index++;
                 
@@ -1754,38 +1759,14 @@ static void configfs_fill_formats(const char* path, const char * part)
                     goto free;
                 }
             }
-            
+
             uvc_frame_format[last_format_index].usb_speed = usb_speed;
             uvc_frame_format[last_format_index].video_format = video_format;
             uvc_frame_format[last_format_index].format_name = strdup(format_name);
             uvc_frame_format[last_format_index].defined = true;
         }
-        
-        if (key_word == UVC_FORMAT_DWDEFAULTFRAMEINTERVAL) {
-            uvc_frame_format[last_format_index].dwDefaultFrameInterval = value;
 
-        } else if (key_word == UVC_FORMAT_DWMAXVIDEOFRAMEBUFFERSIZE) {
-            uvc_frame_format[last_format_index].dwMaxVideoFrameBufferSize = value;
-
-        } else if (key_word == UVC_FORMAT_DWMAXBITRATE) {
-            uvc_frame_format[last_format_index].dwMaxBitRate = value;
-
-        } else if (key_word == UVC_FORMAT_DWMINBITRATE) {
-            uvc_frame_format[last_format_index].dwMinBitRate = value;
-
-        } else if (key_word == UVC_FORMAT_WHEIGHT) {
-            uvc_frame_format[last_format_index].wHeight = value;
-
-        } else if (key_word == UVC_FORMAT_WWIDTH) {
-            uvc_frame_format[last_format_index].wWidth = value;
-
-        } else if (key_word == UVC_FORMAT_BMCAPABILITIES) {
-            uvc_frame_format[last_format_index].bmCapabilities = value;
-
-        } else if (key_word == UVC_FORMAT_BFRAMEINDEX) {
-            uvc_frame_format[last_format_index].bFrameIndex = value;
-
-        }
+        set_uvc_format_value(array[index - 1], last_format_index, value);
     }
 
 free:
@@ -1794,7 +1775,7 @@ free:
 
 static void configfs_fill_streaming_params(const char* path, const char * part)
 {
-    int value = read_value(path);
+    int value = configfs_read_value(path);
 
     /*
      * streaming_maxburst	0..15 (ss only)
