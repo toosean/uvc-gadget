@@ -43,6 +43,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <unistd.h>
 #include <stdbool.h>
 #include <time.h>
@@ -53,6 +54,14 @@
 #include <linux/videodev2.h>
 
 #include "uvc-gadget.h"
+
+volatile sig_atomic_t terminate = 0;
+
+void term(int signum)
+{
+    (void)(signum); /* avoid warning: unused parameter 'signum' */
+    terminate = 1;
+}
 
 static int sys_gpio_write(unsigned int type, char pin[], char value[])
 {
@@ -333,6 +342,9 @@ static void v4l2_uninit_device(struct v4l2_device *dev)
 
     switch (dev->io) {
     case IO_METHOD_MMAP:
+        if (!dev->mem) {
+            return;
+        }
         for (i = 0; i < dev->nbufs; ++i) {
             if (munmap(dev->mem[i].start, dev->mem[i].length) < 0) {
                 printf("%s: munmap failed\n", dev->device_type_name);
@@ -958,9 +970,11 @@ static void v4l2_device_stream_off(struct v4l2_device *dev)
 {
     if (dev->is_streaming) {
         v4l2_video_stream(dev, STREAM_OFF);
-        v4l2_uninit_device(dev);
-        v4l2_reqbufs(dev, 0);
     }
+    printf("%s: Uninit device\n", dev->device_type_name);
+    v4l2_uninit_device(dev);
+    printf("%s: Request 0 buffers\n", dev->device_type_name);
+    v4l2_reqbufs(dev, 0);
 }
 
 static void uvc_handle_streamoff_event(struct v4l2_device *dev)
@@ -1455,7 +1469,7 @@ static void processing_loop_video(struct v4l2_device * udev, struct v4l2_device 
     fd_set fdsv, fdsu;
     int nfds;
 
-    while (1) {
+    while (!terminate) {
         FD_ZERO(&fdsv);
         FD_ZERO(&fdsu);
 
@@ -1580,11 +1594,14 @@ int init()
 
     processing_loop_video(udev, vdev);
  
+    printf("\n*** UVC GADGET SHUTDOWN ***\n");
+
     v4l2_device_stream_off(vdev);
     v4l2_device_stream_off(udev);
     v4l2_close(vdev);
     v4l2_close(udev);
 
+    printf("*** UVC GADGET EXIT ***\n");
     return 0;
 }
 
@@ -1885,6 +1902,12 @@ int main(int argc, char *argv[])
 {
     int ret;
     int opt;
+
+    struct sigaction action;
+    CLEAR(action);
+    action.sa_handler = term;
+    sigaction(SIGTERM, &action, NULL);
+    sigaction(SIGINT, &action, NULL);
 
     ret = configfs_get_uvc_settings();
     if (ret < 0) {
