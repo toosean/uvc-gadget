@@ -229,6 +229,7 @@ struct uvc_settings {
     bool streaming_status_onboard_enabled;
     char * streaming_status_pin;
     bool streaming_status_enabled;
+    unsigned int blink_on_startup;
 };
 
 struct uvc_settings settings = {
@@ -242,6 +243,7 @@ struct uvc_settings settings = {
     .streaming_status_onboard = false,
     .streaming_status_onboard_enabled = false,
     .streaming_status_enabled = false,
+    .blink_on_startup = 0
 };
 
 struct control_mapping_pair {

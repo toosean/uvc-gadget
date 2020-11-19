@@ -176,10 +176,10 @@ static void streaming_status_enable()
     return;
 }
 
-static void streaming_status_value(enum video_stream_action status)
+static void streaming_status_value(bool state)
 {
-    char * gpio_value = (status == STREAM_ON) ? GPIO_VALUE_ON : GPIO_VALUE_OFF;
-    char * led_value = (status == STREAM_ON) ? LED_BRIGHTNESS_HIGH : LED_BRIGHTNESS_LOW;
+    char * gpio_value = (state) ? GPIO_VALUE_ON : GPIO_VALUE_OFF;
+    char * led_value = (state) ? LED_BRIGHTNESS_HIGH : LED_BRIGHTNESS_LOW;
 
     if (settings.streaming_status_enabled) {
         sys_gpio_write(GPIO_VALUE, settings.streaming_status_pin, gpio_value);
@@ -785,7 +785,8 @@ static void v4l2_uvc_video_process()
 
     if (!uvc_dev.is_streaming) {
         uvc_video_stream(STREAM_ON);
-        streaming_status_value((uvc_dev.is_streaming) ? STREAM_ON : STREAM_OFF);
+        settings.blink_on_startup = 0;
+        streaming_status_value(uvc_dev.is_streaming);
     }
 }
 
@@ -1239,6 +1240,8 @@ static void uvc_handle_streamon_event()
         }
 
         uvc_video_stream(STREAM_ON);
+        settings.blink_on_startup = 0;
+        streaming_status_value(uvc_dev.is_streaming);
     }
 }
 
@@ -1258,7 +1261,7 @@ static void uvc_handle_streamoff_event()
     uvc_video_stream(STREAM_OFF);
     uvc_request_bufs(0);
 
-    streaming_status_value((uvc_dev.is_streaming) ? STREAM_ON : STREAM_OFF);
+    streaming_status_value(uvc_dev.is_streaming);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1760,6 +1763,8 @@ static void processing_loop_v4l2_uvc()
 {
     struct timeval tv;
     struct timeval video_tv;
+    double last_time_blink = 0;
+    bool blink_state = false;
     int activity;
     fd_set fdsv, fdsu;
     int nfds;
@@ -1812,6 +1817,9 @@ static void processing_loop_v4l2_uvc()
             break;
         }
 
+        gettimeofday(&video_tv, 0);
+        double now = (video_tv.tv_sec + (video_tv.tv_usec * 1e-6)) * 1000;
+
         if (FD_ISSET(uvc_dev.fd, &efds)) {
             uvc_events_process();
         }
@@ -1826,12 +1834,21 @@ static void processing_loop_v4l2_uvc()
             }
 
             if (settings.show_fps) {
-                gettimeofday(&video_tv, 0);
-                double now = (video_tv.tv_sec + (video_tv.tv_usec * 1e-6)) * 1000;
                 if (now - uvc_dev.last_time_video_process >= 1000) {
                     printf("FPS: %d\n", uvc_dev.buffers_processed);
                     uvc_dev.buffers_processed = 0;
                     uvc_dev.last_time_video_process = now;
+                }
+            }
+        }
+        
+        if (settings.blink_on_startup > 0) {
+            if (now - last_time_blink >= 100) {
+                blink_state = !(blink_state);
+                streaming_status_value(blink_state);
+                last_time_blink = now;
+                if (!blink_state) {
+                    settings.blink_on_startup -= 1;
                 }
             }
         }
@@ -1843,6 +1860,8 @@ static void processing_loop_fb_uvc()
     struct timeval video_tv;
     int activity;
     double next_frame_time = 0;
+    double last_time_blink = 0;
+    bool blink_state = false;
     double now;
     fd_set fdsu;
 
@@ -1893,6 +1912,17 @@ static void processing_loop_fb_uvc()
                 printf("FPS: %d\n", uvc_dev.buffers_processed);
                 uvc_dev.buffers_processed = 0;
                 uvc_dev.last_time_video_process = now;
+            }
+        }
+
+        if (settings.blink_on_startup > 0) {
+            if (now - last_time_blink >= 100) {
+                blink_state = !(blink_state);
+                streaming_status_value(blink_state);
+                last_time_blink = now;
+                if (!blink_state) {
+                    settings.blink_on_startup -= 1;
+                }
             }
         }
     }
@@ -2197,6 +2227,7 @@ static void usage(const char * argv0)
 {
     fprintf(stderr, "Usage: %s [options]\n", argv0);
     fprintf(stderr, "Available options are\n");
+    fprintf(stderr, " -b value    Blink X times on startup (b/w 1 and 20 with led0 or GPIO pin if defined)\n");
     fprintf(stderr, " -f device   Framebuffer device\n");
     fprintf(stderr, " -h          Print this help screen and exit\n");
     fprintf(stderr, " -l          Use onboard led0 for streaming status indication\n");
@@ -2220,6 +2251,7 @@ static void show_settings()
     printf("SETTINGS: Onboard led0 used for streaming status: %s\n",
         (settings.streaming_status_onboard_enabled) ? "ENABLED" : "DISABLED"
     );
+    printf("SETTINGS: Blink on startup: %d times\n", settings.blink_on_startup);
 
     printf("SETTINGS: UVC device name: %s\n", settings.uvc_devname);
     if (settings.source_device == DEVICE_TYPE_FRAMEBUFFER) {
@@ -2248,8 +2280,16 @@ int main(int argc, char * argv[])
         return 1;
     }
 
-    while ((opt = getopt(argc, argv, "hlf:n:p:r:u:v:x")) != -1) {
+    while ((opt = getopt(argc, argv, "hlb:f:n:p:r:u:v:x")) != -1) {
         switch (opt) {
+        case 'b':
+            if (atoi(optarg) < 1 || atoi(optarg) > 20) {
+                fprintf(stderr, "ERROR: Blink x times on startup\n");
+                goto err;
+            }
+            settings.blink_on_startup = atoi(optarg);
+            break;
+
         case 'f':
             settings.fb_devname = optarg;
             settings.source_device = DEVICE_TYPE_FRAMEBUFFER;
