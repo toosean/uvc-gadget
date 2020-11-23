@@ -10,7 +10,7 @@ Everything you wanted to know about uvc-gadget
 
 ## How to define frame resolutions
 
-TODO [Frame resolutions](src/frame-resolution.md)
+[Frame resolutions and formats](src/frame-resolution.md)
 
 ## How to enable more video controls
 
