@@ -4,13 +4,17 @@
 
 |argument|value|description|
 |:-------|:----|:----------|
+|**-b**|**\<value\>**|**Blink X times on startup**<br>(b/w 1 and 20 with led0 or GPIO pin if defined)|
+|**-f**|**\<device\>**|**Framebuffer device**<br>Input device: /dev/fb0|
 |**-h**||**Print help screen and exit**|
 |**-l**||**Use onboard led0 for streaming status indication**|
-|**-n**|**\<buffers\>**|**Number of Video buffers (b/w 2 and 32)**|
+|**-n**|**\<buffers\>**|**Number of Video buffers**<br>(b/w 2 and 32)|
 |**-o**|**\<IO method\>**|**Select UVC IO method:**<br>0 = MMAP<br>1 = USER_PTR|
 |**-p**|**\<pin_number\>**|**GPIO pin number for streaming status indication**|
+|**-r**|**\<fps\>**|**Framerate for framebuffer**<br>(b/w 1 and 30)|
 |**-u**|**\<device\>**|**UVC Video Output device**<br>Output device: /dev/video1|
 |**-v**|**\<device\>**|**V4L2 Video Capture device**<br>Input device: /dev/video0|
+|**-x**||**Show fps information**|
 
 
 ## Resources

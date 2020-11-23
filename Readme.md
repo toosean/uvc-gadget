@@ -8,15 +8,16 @@
     Usage: ./uvc-gadget [options]
     
     Available options are
+        -b value       Blink X times on startup (b/w 1 and 20 with led0 or GPIO pin if defined)
+        -f device      Framebuffer device
         -h             Print this help screen and exit
         -l             Use onboard led0 for streaming status indication
-        -n             Number of Video buffers (b/w 2 and 32)
-        -o <IO method> Select UVC IO method:
-                0 = MMAP
-                1 = USER_PTR
-        -p             GPIO pin number for streaming status indication
+        -n value       Number of Video buffers (b/w 2 and 32)
+        -p value       GPIO pin number for streaming status indication
+        -r value       Framerate for framebuffer (b/w 1 and 30)
         -u device      UVC Video Output device
         -v device      V4L2 Video Capture device
+        -x             show fps information
 
 ## Build  
 
