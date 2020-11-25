@@ -9,7 +9,6 @@
 |**-h**||**Print help screen and exit**|
 |**-l**||**Use onboard led0 for streaming status indication**|
 |**-n**|**\<buffers\>**|**Number of Video buffers**<br>(b/w 2 and 32)|
-|**-o**|**\<IO method\>**|**Select UVC IO method:**<br>0 = MMAP<br>1 = USER_PTR|
 |**-p**|**\<pin_number\>**|**GPIO pin number for streaming status indication**|
 |**-r**|**\<fps\>**|**Framerate for framebuffer**<br>(b/w 1 and 30)|
 |**-u**|**\<device\>**|**UVC Video Output device**<br>Output device: /dev/video1|
@@ -25,8 +24,12 @@
 
 ### New arguments - described above
 
+    * -b
+    * -f
     * -l
     * -p
+    * -r
+    * -x
 
 ### Removed arguments
 
@@ -44,6 +47,9 @@
 
  * -m - Streaming mult for ISOC (b/w 0 and 2)
     - unnecessary for new version - dwMaxPayloadTransferSize is set to streaming_maxpacket value
+
+ * -o - Select UVC IO method
+    - unnecessary for new version - input device always use MMAP and UVC device use USER_PTR
 
  * -r - Select frame resolution
     - frame resolution is removed from uvc-gadget.c and now is obtained from configfs and host computer
