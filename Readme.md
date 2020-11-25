@@ -1,5 +1,14 @@
 # uvc-gadget
 
+## Finished linux-based firmware package
+If you need a fast and maintained linux-based firmware package for your webcam then here is the best place for you - [https://github.com/showmewebcam/showmewebcam](https://github.com/showmewebcam/showmewebcam). 
+- linux-based firmware package
+- fast boot
+- uvc-gadget inside
+
+## DIY place
+If you want to build it yourself, then here is a place for you.
+
 ## Documentation
 [New documentation for uvc-gadget](doc/Readme.md)
 
