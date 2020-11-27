@@ -1048,13 +1048,18 @@ static void v4l2_get_available_formats()
 
 static void uvc_fb_fill_buffer(struct v4l2_buffer * buf)
 {
-    unsigned int r1;
-    unsigned int b1;
-    unsigned int g1;
-    unsigned int r2;
-    unsigned int b2;
-    unsigned int g2;
-    unsigned int i;
+    unsigned int rgba1;
+    unsigned int rgba2;
+    unsigned int yvyu;
+    unsigned char r1;
+    unsigned char b1;
+    unsigned char g1;
+    unsigned char r2;
+    unsigned char b2;
+    unsigned char g2;
+    unsigned int r12;
+    unsigned int b12;
+    unsigned int g12;
     unsigned int size = fb_dev.fb_height * fb_dev.fb_width;
     char * uvc_pixels = (char *) uvc_dev.mem[buf->index].start;
     char * fb_pixels  = (char *) fb_dev.fb_memory;
@@ -1063,54 +1068,63 @@ static void uvc_fb_fill_buffer(struct v4l2_buffer * buf)
 
     switch(fb_dev.fb_bpp) {
         case 16:
-            for (i = 0; i < size; i += 2) {
+            while(size) {
                 b1 = (*(fb_pixels) & 0x1f) << 3;
                 g1 = (((*(fb_pixels + 1) & 0x7) << 3) | (*(fb_pixels) & 0xE0) >> 5) << 2;
                 r1 = (*(fb_pixels + 1) & 0xF8);
                 b2 = (*(fb_pixels + 2) & 0x1f) << 3;
                 g2 = (((*(fb_pixels + 3) & 0x7) << 3) | (*(fb_pixels + 2) & 0xE0) >> 5) << 2;
                 r2 = (*(fb_pixels + 3) & 0xF8);
+                r12 = (r1 + r2) >> 1;
+                g12 = (g1 + g2) >> 1;
+                b12 = (b1 + b2) >> 1;
+                yvyu = RGB2Y(r1, g1, b1) + (RGB2V(r12, g12, b12) << 8) + (RGB2Y(r2, g2, b2) << 16) + (RGB2U(r12, g12, b12) << 24);
+                memcpy(uvc_pixels, &yvyu, 4);
                 fb_pixels += 4;
-                *(uvc_pixels)     = RGB2Y(r1, g1, b1);
-                *(uvc_pixels + 1) = RGB2VX(r1, g1, b1, r2, g2, b2);
-                *(uvc_pixels + 2) = RGB2Y(r2, g2, b2);
-                *(uvc_pixels + 3) = RGB2UX(r1, g1, b1, r2, g2, b2);
                 uvc_pixels += 4;
+                size -= 2;
             }
             break;
 
         case 24:
-            for (i = 0; i < size; i += 2) {
-                r1 = *(fb_pixels);
-                g1 = *(fb_pixels + 1);
-                b1 = *(fb_pixels + 2);
-                r2 = *(fb_pixels + 3);
-                g2 = *(fb_pixels + 4);
-                b2 = *(fb_pixels + 5);
+            while(size) {
+                memcpy(&rgba1, fb_pixels, 3);
+                r1 = rgba1 & 0xFF;
+                g1 = (rgba1 >> 8) & 0xFF;
+                b1 = (rgba1 >> 16) & 0xFF;
+                memcpy(&rgba2, fb_pixels + 3, 3);
+                r2 = rgba2 & 0xFF;
+                g2 = (rgba2 >> 8) & 0xFF;
+                b2 = (rgba2 >> 16) & 0xFF;
+                r12 = (r1 + r2) >> 1;
+                g12 = (g1 + g2) >> 1;
+                b12 = (b1 + b2) >> 1;
+                yvyu = RGB2Y(r1, g1, b1) + (RGB2V(r12, g12, b12) << 8) + (RGB2Y(r2, g2, b2) << 16) + (RGB2U(r12, g12, b12) << 24);
+                memcpy(uvc_pixels, &yvyu, 4);
                 fb_pixels += 6;
-                *(uvc_pixels)     = RGB2Y(r1, g1, b1);
-                *(uvc_pixels + 1) = RGB2VX(r1, g1, b1, r2, g2, b2);
-                *(uvc_pixels + 2) = RGB2Y(r2, g2, b2);
-                *(uvc_pixels + 3) = RGB2UX(r1, g1, b1, r2, g2, b2);
                 uvc_pixels += 4;
+                size -= 2;
             }
             break;
 
         case 32:
-            for (i = 0; i < size; i += 2) {
-                r1 = *(fb_pixels);
-                g1 = *(fb_pixels + 1);
-                b1 = *(fb_pixels + 2);
-                r2 = *(fb_pixels + 4);
-                g2 = *(fb_pixels + 5);
-                b2 = *(fb_pixels + 6);
+            while(size) {
+                memcpy(&rgba1, fb_pixels, 4);
+                r1 = rgba1 & 0xFF;
+                g1 = (rgba1 >> 8) & 0xFF;
+                b1 = (rgba1 >> 16) & 0xFF;
+                memcpy(&rgba2, fb_pixels + 4, 4);
+                r2 = rgba2 & 0xFF;
+                g2 = (rgba2 >> 8) & 0xFF;
+                b2 = (rgba2 >> 16) & 0xFF;
+                r12 = (r1 + r2) >> 1;
+                g12 = (g1 + g2) >> 1;
+                b12 = (b1 + b2) >> 1;
+                yvyu = RGB2Y(r1, g1, b1) + (RGB2V(r12, g12, b12) << 8) + (RGB2Y(r2, g2, b2) << 16) + (RGB2U(r12, g12, b12) << 24);
+                memcpy(uvc_pixels, &yvyu, 4);
                 fb_pixels += 8;
-                *(uvc_pixels)     = RGB2Y(r1, g1, b1);
-                *(uvc_pixels + 1) = RGB2VX(r1, g1, b1, r2, g2, b2);
-                *(uvc_pixels + 2) = RGB2Y(r2, g2, b2);
-                *(uvc_pixels + 3) = RGB2UX(r1, g1, b1, r2, g2, b2);
-
                 uvc_pixels += 4;
+                size -= 2;
             }
             break;
     }
