@@ -1050,16 +1050,16 @@ static void uvc_fb_fill_buffer(struct v4l2_buffer * buf)
 {
     unsigned int rgba1;
     unsigned int rgba2;
+    unsigned int rgba1_last;
+    unsigned int rgba2_last;
     unsigned int yvyu;
+    unsigned int yvyu_last;
     unsigned char r1;
     unsigned char b1;
     unsigned char g1;
     unsigned char r2;
     unsigned char b2;
     unsigned char g2;
-    unsigned int r12;
-    unsigned int b12;
-    unsigned int g12;
     unsigned int size = fb_dev.fb_height * fb_dev.fb_width;
     char * uvc_pixels = (char *) uvc_dev.mem[buf->index].start;
     char * fb_pixels  = (char *) fb_dev.fb_memory;
@@ -1075,10 +1075,7 @@ static void uvc_fb_fill_buffer(struct v4l2_buffer * buf)
                 b2 = (*(fb_pixels + 2) & 0x1f) << 3;
                 g2 = (((*(fb_pixels + 3) & 0x7) << 3) | (*(fb_pixels + 2) & 0xE0) >> 5) << 2;
                 r2 = (*(fb_pixels + 3) & 0xF8);
-                r12 = (r1 + r2) >> 1;
-                g12 = (g1 + g2) >> 1;
-                b12 = (b1 + b2) >> 1;
-                yvyu = RGB2Y(r1, g1, b1) + (RGB2V(r12, g12, b12) << 8) + (RGB2Y(r2, g2, b2) << 16) + (RGB2U(r12, g12, b12) << 24);
+                yvyu = rgb2yvyu(r1, g1, b1, r2, g2, b2);
                 memcpy(uvc_pixels, &yvyu, 4);
                 fb_pixels += 4;
                 uvc_pixels += 4;
@@ -1089,18 +1086,22 @@ static void uvc_fb_fill_buffer(struct v4l2_buffer * buf)
         case 24:
             while(size) {
                 memcpy(&rgba1, fb_pixels, 3);
-                r1 = rgba1 & 0xFF;
-                g1 = (rgba1 >> 8) & 0xFF;
-                b1 = (rgba1 >> 16) & 0xFF;
                 memcpy(&rgba2, fb_pixels + 3, 3);
-                r2 = rgba2 & 0xFF;
-                g2 = (rgba2 >> 8) & 0xFF;
-                b2 = (rgba2 >> 16) & 0xFF;
-                r12 = (r1 + r2) >> 1;
-                g12 = (g1 + g2) >> 1;
-                b12 = (b1 + b2) >> 1;
-                yvyu = RGB2Y(r1, g1, b1) + (RGB2V(r12, g12, b12) << 8) + (RGB2Y(r2, g2, b2) << 16) + (RGB2U(r12, g12, b12) << 24);
-                memcpy(uvc_pixels, &yvyu, 4);
+                if (rgba1 == rgba1_last && rgba2 == rgba2_last) {
+                    memcpy(uvc_pixels, &yvyu_last, 4);
+                } else {
+                    r1 = rgba1 & 0xFF;
+                    g1 = (rgba1 >> 8) & 0xFF;
+                    b1 = (rgba1 >> 16) & 0xFF;
+                    r2 = rgba2 & 0xFF;
+                    g2 = (rgba2 >> 8) & 0xFF;
+                    b2 = (rgba2 >> 16) & 0xFF;
+                    yvyu = rgb2yvyu(r1, g1, b1, r2, g2, b2);
+                    rgba1_last = rgba1;
+                    rgba2_last = rgba2;
+                    yvyu_last = yvyu;
+                    memcpy(uvc_pixels, &yvyu, 4);
+                }
                 fb_pixels += 6;
                 uvc_pixels += 4;
                 size -= 2;
@@ -1110,18 +1111,22 @@ static void uvc_fb_fill_buffer(struct v4l2_buffer * buf)
         case 32:
             while(size) {
                 memcpy(&rgba1, fb_pixels, 4);
-                r1 = rgba1 & 0xFF;
-                g1 = (rgba1 >> 8) & 0xFF;
-                b1 = (rgba1 >> 16) & 0xFF;
                 memcpy(&rgba2, fb_pixels + 4, 4);
-                r2 = rgba2 & 0xFF;
-                g2 = (rgba2 >> 8) & 0xFF;
-                b2 = (rgba2 >> 16) & 0xFF;
-                r12 = (r1 + r2) >> 1;
-                g12 = (g1 + g2) >> 1;
-                b12 = (b1 + b2) >> 1;
-                yvyu = RGB2Y(r1, g1, b1) + (RGB2V(r12, g12, b12) << 8) + (RGB2Y(r2, g2, b2) << 16) + (RGB2U(r12, g12, b12) << 24);
-                memcpy(uvc_pixels, &yvyu, 4);
+                if (rgba1 == rgba1_last && rgba2 == rgba2_last) {
+                    memcpy(uvc_pixels, &yvyu_last, 4);
+                } else {
+                    r1 = rgba1 & 0xFF;
+                    g1 = (rgba1 >> 8) & 0xFF;
+                    b1 = (rgba1 >> 16) & 0xFF;
+                    r2 = rgba2 & 0xFF;
+                    g2 = (rgba2 >> 8) & 0xFF;
+                    b2 = (rgba2 >> 16) & 0xFF;
+                    yvyu = rgb2yvyu(r1, g1, b1, r2, g2, b2);
+                    rgba1_last = rgba1;
+                    rgba2_last = rgba2;
+                    yvyu_last = yvyu;
+                    memcpy(uvc_pixels, &yvyu, 4);
+                }
                 fb_pixels += 8;
                 uvc_pixels += 4;
                 size -= 2;
