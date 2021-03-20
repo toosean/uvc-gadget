@@ -1,0 +1,202 @@
+#!/bin/bash
+
+GADGET_NAME="pi_gadget"
+SERIAL_NUMBER="100000000d2386db"
+MANUFACTURER="Raspberry"
+PRODUCT_NAME="Gadget"
+UVC_DEVICE="/dev/video1"
+UVC_GADGET_PATH="${PWD}"
+
+echo "INFO:  --- Gadget init ---"
+
+if [ $(id -u) -ne 0 ]
+then
+    echo "Please run as root"
+    exit
+fi
+
+CONFIGFS_PATH=$(findmnt -t configfs -n --output=target)
+GADGET_PATH="${CONFIGFS_PATH}/usb_gadget/${GADGET_NAME}"
+
+echo "INFO:  Gadget config path: ${GADGET_PATH}"
+
+# Include configuration files
+for CONFIG_PATH in "$@"
+do
+    if [ "${CONFIG_PATH}" = "fps" ]; then
+        SHOW_FPS=true
+
+    elif [ -e "${CONFIG_PATH}" ]; then
+        echo "INFO:  Read config: ${CONFIG_PATH}"
+        source "${CONFIG_PATH}"
+    else
+        echo "ERROR: Config '${CONFIG_PATH}' NOT FOUND"
+    fi
+done
+
+uvc_config_frame () {
+    FORMAT=$1
+    NAME=$2
+    FPS=$3
+    WIDTH=$4
+    HEIGHT=$5
+
+    FRAMEDIR=$GADGET_PATH/functions/uvc.usb0/streaming/$FORMAT/$NAME/${WIDTH}x${HEIGHT}p
+
+    mkdir -p $FRAMEDIR
+
+    FRAME_INTERVAL=$((10000000 / $FPS))
+
+    echo $WIDTH > $FRAMEDIR/wWidth
+    echo $HEIGHT > $FRAMEDIR/wHeight
+    echo $FRAME_INTERVAL > $FRAMEDIR/dwDefaultFrameInterval
+    echo $(($WIDTH * $HEIGHT * 80)) > $FRAMEDIR/dwMinBitRate
+    echo $(($WIDTH * $HEIGHT * 160)) > $FRAMEDIR/dwMaxBitRate
+    echo $(($WIDTH * $HEIGHT * 2)) > $FRAMEDIR/dwMaxVideoFrameBufferSize
+    cat <<EOF > $FRAMEDIR/dwFrameInterval
+${FRAME_INTERVAL}
+EOF
+}
+
+# Gadget configfs initialization
+
+mkdir $GADGET_PATH
+
+echo 0x1d6b > $GADGET_PATH/idVendor
+echo 0x0104 > $GADGET_PATH/idProduct
+echo 0x0100 > $GADGET_PATH/bcdDevice
+echo 0x0200 > $GADGET_PATH/bcdUSB
+
+echo 0xEF   > $GADGET_PATH/bDeviceClass
+echo 0x02   > $GADGET_PATH/bDeviceSubClass
+echo 0x01   > $GADGET_PATH/bDeviceProtocol
+
+mkdir $GADGET_PATH/strings/0x409
+echo "${SERIAL_NUMBER}" > $GADGET_PATH/strings/0x409/serialnumber
+echo "${MANUFACTURER}"  > $GADGET_PATH/strings/0x409/manufacturer
+echo "${PRODUCT_NAME}"  > $GADGET_PATH/strings/0x409/product
+
+mkdir $GADGET_PATH/configs/c.2
+mkdir $GADGET_PATH/configs/c.2/strings/0x409
+echo 500 > $GADGET_PATH/configs/c.2/MaxPower
+
+if [ "${INIT_UVC}" = true ]; then
+
+    echo "INFO:  UVC init"
+
+    MJPEG=false
+    UNCOMPRESSED=false
+
+    mkdir $GADGET_PATH/functions/uvc.usb0
+
+    mkdir -p $GADGET_PATH/functions/uvc.usb0/control/header/h
+    ln -s $GADGET_PATH/functions/uvc.usb0/control/header/h $GADGET_PATH/functions/uvc.usb0/control/class/fs/h
+
+    if [ -z "${UVC_FORMATS}" ]; then
+        echo "ERROR: Missing UVC_FORMATS"
+        exit 2
+    fi
+
+    for FORMAT in "${UVC_FORMATS[@]}"; do
+        FORMAT_ARRAY=($(echo "${FORMAT}" | tr ':' '\n'))
+
+        echo "INFO:  Frame format - format: ${FORMAT_ARRAY[0]}, fps: ${FORMAT_ARRAY[2]}, width: ${FORMAT_ARRAY[3]}, height: ${FORMAT_ARRAY[4]}"
+
+        uvc_config_frame "${FORMAT_ARRAY[0]}" "${FORMAT_ARRAY[1]}" "${FORMAT_ARRAY[2]}" "${FORMAT_ARRAY[3]}" "${FORMAT_ARRAY[4]}"
+
+        if [ "${FORMAT_ARRAY[0]}" = "mjpeg" ]; then
+            MJPEG=true
+        fi
+
+        if [ "${FORMAT_ARRAY[0]}" = "uncompressed" ]; then
+            UNCOMPRESSED=true
+        fi
+    done
+
+    mkdir $GADGET_PATH/functions/uvc.usb0/streaming/header/h
+    cd $GADGET_PATH/functions/uvc.usb0/streaming/header/h
+
+    if [ "${MJPEG}" = true ]; then
+        ln -s $GADGET_PATH/functions/uvc.usb0/streaming/mjpeg/m
+    fi
+
+    if [ "${UNCOMPRESSED}" = true ]; then
+        ln -s $GADGET_PATH/functions/uvc.usb0/streaming/uncompressed/u
+    fi
+
+    cd $GADGET_PATH/functions/uvc.usb0/streaming/class/fs
+    ln -s ../../header/h
+
+    cd $GADGET_PATH/functions/uvc.usb0/streaming/class/hs
+    ln -s ../../header/h
+
+    ln -s $GADGET_PATH/functions/uvc.usb0 $GADGET_PATH/configs/c.2/uvc.usb0
+
+fi
+
+if [ "${INIT_SERIAL}" = true ]; then
+
+    echo "INFO:  SERIAL init"
+
+    mkdir $GADGET_PATH/functions/acm.usb0
+    ln -s $GADGET_PATH/functions/acm.usb0 $GADGET_PATH/configs/c.2/acm.usb0
+
+fi
+
+udevadm settle -t 5 || :
+ls /sys/class/udc > $GADGET_PATH/UDC
+
+echo "INFO:  --- Gadget initialization finish ---"
+
+if [ "${INIT_UVC}" = true ]; then
+    echo "INFO:  --- Start UVC-GADGET ---"
+
+    UVC_GADGET_PARAMS=()
+
+    if [ "${FB_DEVICE}" ]; then
+        echo "INFO:  Framebuffer device: ${FB_DEVICE}"
+        UVC_GADGET_PARAMS+=("-f")
+        UVC_GADGET_PARAMS+=("${FB_DEVICE}")
+
+    fi
+
+    if [ "${IMAGE_PATH}" ]; then
+        echo "INFO:  Image path: ${IMAGE_PATH}"
+        UVC_GADGET_PARAMS+=("-i")
+        UVC_GADGET_PARAMS+=("${IMAGE_PATH}")
+
+    fi
+
+    if [ "${UVC_DEVICE}" ]; then
+        echo "INFO:  UVC device: ${UVC_DEVICE}"
+       UVC_GADGET_PARAMS+=("-u")
+       UVC_GADGET_PARAMS+=("${UVC_DEVICE}")
+
+    fi
+
+    if [ "${V4L2_DEVICE}" ]; then
+        echo "INFO:  V4L2 device: ${V4L2_DEVICE}"
+        UVC_GADGET_PARAMS+=("-v")
+        UVC_GADGET_PARAMS+=("${V4L2_DEVICE}")
+
+    fi
+
+    if [ "${SET_FPS}" ]; then
+        echo "INFO:  Set FPS: ${SET_FPS}"
+        UVC_GADGET_PARAMS+=("-r")
+        UVC_GADGET_PARAMS+=("${SET_FPS}")
+
+    fi
+
+    if [ "${SHOW_FPS}" ]; then
+        echo "INFO:  Show FPS: ${SHOW_FPS}"
+        UVC_GADGET_PARAMS+=("-x")
+
+    fi
+
+    cd "${UVC_GADGET_PATH}"
+    ./uvc-gadget "${UVC_GADGET_PARAMS[@]}"
+
+fi
+
+echo "INFO:  --- Gadget finish ---"
