@@ -24,17 +24,26 @@ void processing_loop(struct processing *processing)
 
     processing->terminate = &terminate;
 
-    if (processing->source.type == ENDPOINT_FB && processing->target.type == ENDPOINT_UVC)
+    if (processing->target.type == ENDPOINT_UVC)
     {
-        processing_loop_fb_uvc(processing);
-    }
-    else if (processing->source.type == ENDPOINT_IMAGE && processing->target.type == ENDPOINT_UVC)
-    {
-        processing_loop_image_uvc(processing);
-    }
-    else if (processing->source.type == ENDPOINT_V4L2 && processing->target.type == ENDPOINT_UVC)
-    {
-        processing_loop_v4l2_uvc(processing);
+        switch (processing->source.type)
+        {
+        case ENDPOINT_FB:
+            processing_loop_fb_uvc(processing);
+            break;
+
+        case ENDPOINT_IMAGE:
+            processing_loop_image_uvc(processing);
+            break;
+
+        case ENDPOINT_V4L2:
+            processing_loop_v4l2_uvc(processing);
+            break;
+
+        default:
+            printf("PROCESSING: ERROR - Missing loop for UVC endpoint\n");
+            break;
+        }
     }
     else
     {
