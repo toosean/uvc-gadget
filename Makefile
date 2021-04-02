@@ -13,6 +13,7 @@ OBJFILES = src/configfs.o                   \
 			src/processing_fb_uvc.o         \
 			src/processing_image_uvc.o      \
 			src/processing_v4l2_uvc.o       \
+			src/uvc_device_detect.o         \
 			src/uvc_endpoint.o              \
 			src/uvc_control.o               \
 			src/uvc_events.o                \

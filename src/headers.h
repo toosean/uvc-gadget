@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include <ftw.h>
+#include <dirent.h>
 
 #include <sys/ioctl.h>
 #include <sys/inotify.h>

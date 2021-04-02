@@ -4,7 +4,8 @@ GADGET_NAME="pi_gadget"
 SERIAL_NUMBER="100000000d2386db"
 MANUFACTURER="Raspberry"
 PRODUCT_NAME="Gadget"
-UVC_DEVICE="/dev/video1"
+# UVC_DEVICE="/dev/video1"
+UVC_DEVICE_AUTODETECT=true
 UVC_GADGET_PATH="${PWD}"
 
 echo "INFO:  --- Gadget init ---"
@@ -174,6 +175,12 @@ if [ "${INIT_UVC}" = true ]; then
         echo "INFO:  Image path: ${IMAGE_PATH}"
         UVC_GADGET_PARAMS+=("-i")
         UVC_GADGET_PARAMS+=("${IMAGE_PATH}")
+
+    fi
+
+    if [ "${UVC_DEVICE_AUTODETECT}" = true ]; then
+        echo "INFO:  Autodetect UVC device"
+       UVC_GADGET_PARAMS+=("-a")
 
     fi
 

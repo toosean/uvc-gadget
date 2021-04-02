@@ -9,12 +9,14 @@
 #include "image_endpoint.h"
 #include "uvc_events.h"
 #include "uvc_control.h"
+#include "uvc_device_detect.h"
 #include "system.h"
 
 struct processing processing;
 bool show_fps = false;
 bool debug = false;
 bool streaming_status_onboard = false;
+bool autodetect_uvc_device = true;
 const char *fb_device_name;
 const char *uvc_device_name;
 const char *v4l2_device_name;
@@ -36,6 +38,8 @@ void cleanup()
 
 int init()
 {
+    const char *uvc_device;
+
     memset(&processing, 0, sizeof(struct processing));
 
     processing.source.type = ENDPOINT_NONE;
@@ -61,7 +65,20 @@ int init()
     v4l2_init(&processing, v4l2_device_name, nbufs);
     fb_init(&processing, fb_device_name);
     image_init(&processing, image_path);
-    uvc_init(&processing, uvc_device_name, nbufs);
+
+    if (uvc_device_name)
+    {
+        uvc_init(&processing, uvc_device_name, nbufs);
+    }
+    else if (autodetect_uvc_device)
+    {
+        uvc_device = uvc_device_detect();
+        if (uvc_device)
+        {
+            printf("UVC: Autodetect found UVC device: %s\n", uvc_device);
+        }
+        uvc_init(&processing, uvc_device, nbufs);
+    }
 
     system_init(&processing);
 
@@ -122,10 +139,13 @@ int main(int argc, char *argv[])
 {
     int opt;
 
-    while ((opt = getopt(argc, argv, "dhlb:f:i:n:p:r:u:v:x")) != -1)
+    while ((opt = getopt(argc, argv, "adhlb:f:i:n:p:r:u:v:x")) != -1)
     {
         switch (opt)
         {
+        case 'a':
+            autodetect_uvc_device = true;
+            break;
 
         case 'b':
             if (atoi(optarg) < 1 || atoi(optarg) > 20)
