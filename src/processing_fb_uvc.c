@@ -16,7 +16,6 @@ static void fb_fill_uvc_buffer(struct processing *processing,
     unsigned int rgba1_last = 0;
     unsigned int rgba2_last = 0;
     unsigned int yvyu = 0;
-    unsigned int yvyu_last = 0;
     unsigned char r1;
     unsigned char b1;
     unsigned char g1;
@@ -26,7 +25,6 @@ static void fb_fill_uvc_buffer(struct processing *processing,
     unsigned int size = fb->height * fb->width;
     char *uvc_pixels = (char *)uvc->mem[uvc_bufer->index].start;
     char *fb_pixels = (char *)fb->memory;
-
     uvc_bufer->bytesused = size * 2;
 
     switch (fb->bpp)
@@ -53,24 +51,20 @@ static void fb_fill_uvc_buffer(struct processing *processing,
         {
             memcpy(&rgba1, fb_pixels, 3);
             memcpy(&rgba2, fb_pixels + 3, 3);
-            if (rgba1 == rgba1_last && rgba2 == rgba2_last)
+            if (rgba1 != rgba1_last || rgba2 != rgba2_last)
             {
-                memcpy(uvc_pixels, &yvyu_last, 4);
-            }
-            else
-            {
-                r1 = rgba1 & 0xFF;
+                r1 = (rgba1 >> 1) & 0xFF;
                 g1 = (rgba1 >> 9) & 0x7F;
                 b1 = (rgba1 >> 17) & 0x7F;
-                r2 = rgba2 & 0xFF;
+                r2 = (rgba2 >> 1) & 0xFF;
                 g2 = (rgba2 >> 9) & 0x7F;
                 b2 = (rgba2 >> 17) & 0x7F;
                 yvyu = rgb2yvyu_opt(r1, g1, b1, r2, g2, b2);
                 rgba1_last = rgba1;
                 rgba2_last = rgba2;
-                yvyu_last = yvyu;
-                memcpy(uvc_pixels, &yvyu, 4);
             }
+            memcpy(uvc_pixels, &yvyu, 4);
+
             fb_pixels += 6;
             uvc_pixels += 4;
             size -= 2;
@@ -83,24 +77,20 @@ static void fb_fill_uvc_buffer(struct processing *processing,
             memcpy(&rgba1, fb_pixels, 4);
             memcpy(&rgba2, fb_pixels + 4, 4);
 
-            if (rgba1 == rgba1_last && rgba2 == rgba2_last)
+            if (rgba1 != rgba1_last || rgba2 != rgba2_last)
             {
-                memcpy(uvc_pixels, &yvyu_last, 4);
-            }
-            else
-            {
-                r1 = rgba1 & 0xFF;
+                r1 = (rgba1 >> 1) & 0x7F;
                 g1 = (rgba1 >> 9) & 0x7F;
                 b1 = (rgba1 >> 17) & 0x7F;
-                r2 = rgba2 & 0xFF;
+                r2 = (rgba2 >> 1) & 0x7F;
                 g2 = (rgba2 >> 9) & 0x7F;
                 b2 = (rgba2 >> 17) & 0x7F;
                 yvyu = rgb2yvyu_opt(r1, g1, b1, r2, g2, b2);
                 rgba1_last = rgba1;
                 rgba2_last = rgba2;
-                yvyu_last = yvyu;
-                memcpy(uvc_pixels, &yvyu, 4);
             }
+            memcpy(uvc_pixels, &yvyu, 4);
+
             fb_pixels += 8;
             uvc_pixels += 4;
             size -= 2;
