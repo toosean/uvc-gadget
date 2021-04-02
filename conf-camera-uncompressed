@@ -2,6 +2,7 @@
 
 INIT_UVC=true
 FPS="30"
+STREAMING_MAXPACKET="2048"
 
 UVC_FORMATS=(
     "uncompressed:u:${FPS}:640:360"

@@ -87,15 +87,22 @@ if [ "${INIT_UVC}" = true ]; then
     MJPEG=false
     UNCOMPRESSED=false
 
-    mkdir $GADGET_PATH/functions/uvc.usb0
+    UVC_FUNCTION_PATH="${GADGET_PATH}/functions/uvc.usb0"
 
-    mkdir -p $GADGET_PATH/functions/uvc.usb0/control/header/h
-    ln -s $GADGET_PATH/functions/uvc.usb0/control/header/h $GADGET_PATH/functions/uvc.usb0/control/class/fs/h
+    mkdir "${UVC_FUNCTION_PATH}"
+
+    mkdir -p "${UVC_FUNCTION_PATH}/control/header/h"
+    ln -s "${UVC_FUNCTION_PATH}/control/header/h" "${UVC_FUNCTION_PATH}/control/class/fs/h"
 
     if [ -z "${UVC_FORMATS}" ]; then
         echo "ERROR: Missing UVC_FORMATS"
         exit 2
     fi
+
+    if [ ! -z "${STREAMING_MAXPACKET}" ]; then
+        echo "${STREAMING_MAXPACKET}" > "${UVC_FUNCTION_PATH}/streaming_maxpacket"
+    fi
+
 
     for FORMAT in "${UVC_FORMATS[@]}"; do
         FORMAT_ARRAY=($(echo "${FORMAT}" | tr ':' '\n'))
@@ -113,24 +120,27 @@ if [ "${INIT_UVC}" = true ]; then
         fi
     done
 
-    mkdir $GADGET_PATH/functions/uvc.usb0/streaming/header/h
-    cd $GADGET_PATH/functions/uvc.usb0/streaming/header/h
+    mkdir "${UVC_FUNCTION_PATH}/streaming/header/h"
+    cd "${UVC_FUNCTION_PATH}/streaming/header/h"
 
     if [ "${MJPEG}" = true ]; then
-        ln -s $GADGET_PATH/functions/uvc.usb0/streaming/mjpeg/m
+        ln -s "${UVC_FUNCTION_PATH}/streaming/mjpeg/m"
     fi
 
     if [ "${UNCOMPRESSED}" = true ]; then
-        ln -s $GADGET_PATH/functions/uvc.usb0/streaming/uncompressed/u
+        ln -s "${UVC_FUNCTION_PATH}/streaming/uncompressed/u"
     fi
 
-    cd $GADGET_PATH/functions/uvc.usb0/streaming/class/fs
+    cd "${UVC_FUNCTION_PATH}/streaming/class/fs"
     ln -s ../../header/h
 
-    cd $GADGET_PATH/functions/uvc.usb0/streaming/class/hs
+    cd "${UVC_FUNCTION_PATH}/streaming/class/hs"
     ln -s ../../header/h
 
-    ln -s $GADGET_PATH/functions/uvc.usb0 $GADGET_PATH/configs/c.2/uvc.usb0
+    cd "${UVC_FUNCTION_PATH}/streaming/class/ss"
+    ln -s ../../header/h
+
+    ln -s "${UVC_FUNCTION_PATH}" $GADGET_PATH/configs/c.2/uvc.usb0
 
 fi
 
