@@ -1,5 +1,6 @@
 
 #include "headers.h"
+#include "v4l2_names.h"
 
 void uvc_apply_format(struct processing *processing)
 {
@@ -220,6 +221,8 @@ void uvc_init(struct processing *processing,
         }
 
         printf("UVC: Device is %s on bus %s\n", cap.card, cap.bus_info);
+
+        print_v4l2_capabilities("UVC", cap.capabilities);
 
         uvc->nbufs = nbufs;
         processing->target.type = ENDPOINT_UVC;

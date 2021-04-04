@@ -420,6 +420,8 @@ void v4l2_init(struct processing *processing,
 
         printf("V4L2: Device is %s on bus %s\n", cap.card, cap.bus_info);
 
+        print_v4l2_capabilities("V4L2", cap.capabilities);
+
         v4l2->nbufs = nbufs;
         processing->source.type = ENDPOINT_V4L2;
         processing->source.state = true;

@@ -1,5 +1,4 @@
-
-#include "v4l2_names.h"
+#include "headers.h"
 
 char *v4l2_control_name(unsigned int control)
 {
@@ -224,4 +223,66 @@ char *v4l2_control_name(unsigned int control)
     default:
         return "UNKNOWN";
     }
+}
+
+void print_v4l2_capabilities(const char *title,
+                             uint32_t cap)
+{
+    printf("%s: Device capabilities:", title);
+
+    if (cap & V4L2_CAP_VIDEO_CAPTURE)
+    {
+        printf(" VIDEO_CAPTURE");
+    }
+
+    if (cap & V4L2_CAP_VIDEO_OUTPUT)
+    {
+        printf(" VIDEO_OUTPUT");
+    }
+
+    if (cap & V4L2_CAP_VIDEO_OVERLAY)
+    {
+        printf(" VIDEO_OVERLAY");
+    }
+
+    if (cap & V4L2_CAP_VBI_CAPTURE)
+    {
+        printf(" VBI_CAPTURE");
+    }
+
+    if (cap & V4L2_CAP_VBI_OUTPUT)
+    {
+        printf(" VBI_OUTPUT");
+    }
+
+    if (cap & V4L2_CAP_SLICED_VBI_CAPTURE)
+    {
+        printf(" SLICED_VBI_CAPTURE");
+    }
+
+    if (cap & V4L2_CAP_SLICED_VBI_OUTPUT)
+    {
+        printf(" SLICED_VBI_OUTPUT");
+    }
+
+    if (cap & V4L2_CAP_RDS_CAPTURE)
+    {
+        printf(" RDS_CAPTURE");
+    }
+
+    if (cap & V4L2_CAP_VIDEO_OUTPUT_OVERLAY)
+    {
+        printf(" VIDEO_OUTPUT_OVERLAY");
+    }
+
+    if (cap & V4L2_CAP_HW_FREQ_SEEK)
+    {
+        printf(" HW_FREQ_SEEK");
+    }
+
+    if (cap & V4L2_CAP_RDS_OUTPUT)
+    {
+        printf(" RDS_OUTPUT");
+    }
+    printf("\n");
 }
