@@ -284,5 +284,66 @@ void print_v4l2_capabilities(const char *title,
     {
         printf(" RDS_OUTPUT");
     }
+
+    if (cap & V4L2_CAP_VIDEO_CAPTURE_MPLANE)
+    {
+        printf(" VIDEO_CAPTURE_MPLANE");
+    }
+
+    if (cap & V4L2_CAP_VIDEO_OUTPUT_MPLANE)
+    {
+        printf(" VIDEO_OUTPUT_MPLANE");
+    }
+
+    if (cap & V4L2_CAP_VIDEO_M2M_MPLANE)
+    {
+        printf(" VIDEO_M2M_MPLANE");
+    }
+
+    if (cap & V4L2_CAP_VIDEO_M2M)
+    {
+        printf(" VIDEO_M2M");
+    }
+
+    if (cap & V4L2_CAP_TUNER)
+    {
+        printf(" TUNER");
+    }
+
+    if (cap & V4L2_CAP_AUDIO)
+    {
+        printf(" AUDIO");
+    }
+
+    if (cap & V4L2_CAP_RADIO)
+    {
+        printf(" RADIO");
+    }
+
+    if (cap & V4L2_CAP_MODULATOR)
+    {
+        printf(" MODULATOR");
+    }
+
+    if (cap & V4L2_CAP_READWRITE)
+    {
+        printf(" READWRITE");
+    }
+
+    if (cap & V4L2_CAP_ASYNCIO)
+    {
+        printf(" ASYNCIO");
+    }
+
+    if (cap & V4L2_CAP_STREAMING)
+    {
+        printf(" STREAMING");
+    }
+
+    if (cap & V4L2_CAP_DEVICE_CAPS)
+    {
+        printf(" DEVICE_CAPS");
+    }
+
     printf("\n");
 }
