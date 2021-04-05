@@ -2,21 +2,15 @@
 #include "headers.h"
 #include "uvc_names.h"
 
-static void uvc_dump_streaming_control(struct uvc_streaming_control *usc)
+void uvc_dump_streaming_control(struct uvc_streaming_control *usc)
 {
     printf("UVC Streaming control:\n");
     printf("    bmHint: %d\n", usc->bmHint);
     printf("    bFormatIndex: %d\n", usc->bFormatIndex);
     printf("    bFrameIndex: %d\n", usc->bFrameIndex);
     printf("    dwFrameInterval: %d\n", usc->dwFrameInterval);
-    printf("    wKeyFrameRate: %d\n", usc->wKeyFrameRate);
-    printf("    wPFrameRate: %d\n", usc->wPFrameRate);
-    printf("    wCompQuality: %d\n", usc->wCompQuality);
-    printf("    wCompWindowSize: %d\n", usc->wCompWindowSize);
-    printf("    wDelay: %d\n", usc->wDelay);
     printf("    dwMaxVideoFrameSize: %d\n", usc->dwMaxVideoFrameSize);
     printf("    dwMaxPayloadTransferSize: %d\n", usc->dwMaxPayloadTransferSize);
-    printf("    dwClockFrequency: %d\n", usc->dwClockFrequency);
     printf("    bmFramingInfo: %d\n", usc->bmFramingInfo);
     printf("    bPreferedVersion: %d\n", usc->bPreferedVersion);
     printf("    bMinVersion: %d\n", usc->bMinVersion);
@@ -132,10 +126,9 @@ static int uvc_get_frame_format_index(struct processing *processing,
 }
 
 void uvc_fill_streaming_control(struct processing *processing,
-                                struct uvc_streaming_control *ctrl,
+                                struct uvc_streaming_control *ctrl_out,
                                 enum stream_control_action action,
-                                int iformat,
-                                int iframe)
+                                struct uvc_streaming_control *ctrl_in)
 {
     struct configfs *configfs = &processing->configfs;
     struct settings *settings = &processing->settings;
@@ -143,6 +136,8 @@ void uvc_fill_streaming_control(struct processing *processing,
     struct uvc_request *uvc_request = &processing->uvc_request;
     struct frame_format *frame_format = NULL;
 
+    int iformat = 0;
+    int iframe = 0;
     int format_first;
     int format_last;
     int frame_first;
@@ -167,8 +162,24 @@ void uvc_fill_streaming_control(struct processing *processing,
         break;
 
     case STREAM_CONTROL_SET:
-        printf("UVC: Streaming control action: SET, format: %d, frame: %d\n", iformat, iframe);
+        printf("UVC: Streaming control action: SET\n");
         break;
+    }
+
+    if (ctrl_in)
+    {
+        iformat = ctrl_in->bFormatIndex;
+        iframe = ctrl_in->bFrameIndex;
+
+        if (action == STREAM_CONTROL_SET) {
+            printf("UVC: SET format: %d, frame: %d\n", iformat, iframe);
+        }
+
+        if (settings->debug)
+        {
+            printf("UVC: Control IN: ");
+            uvc_dump_streaming_control(ctrl_in);
+        }
     }
 
     format_first = uvc_get_frame_format_index(processing, -1, FORMAT_INDEX_MIN);
@@ -199,11 +210,6 @@ void uvc_fill_streaming_control(struct processing *processing,
 
     uvc_get_frame_format(processing, &frame_format, iformat, iframe);
 
-    if (settings->debug)
-    {
-        uvc_dump_frame_format(frame_format, "UVC: Frame");
-    }
-
     if (frame_format->dwDefaultFrameInterval >= 100000)
     {
         frame_interval = frame_format->dwDefaultFrameInterval;
@@ -219,25 +225,37 @@ void uvc_fill_streaming_control(struct processing *processing,
         dwMaxPayloadTransferSize -= (configfs->streaming.maxpacket / 1024) * 128;
     }
 
-    memset(ctrl, 0, sizeof *ctrl);
-    ctrl->bmHint = 1;
-    ctrl->bFormatIndex = iformat;
-    ctrl->bFrameIndex = iframe;
-    ctrl->dwMaxVideoFrameSize = get_frame_size(frame_format->video_format, frame_format->wWidth, frame_format->wHeight);
-    ctrl->dwMaxPayloadTransferSize = dwMaxPayloadTransferSize;
-    ctrl->dwFrameInterval = frame_interval;
-    ctrl->bmFramingInfo = 3;
-    ctrl->bMinVersion = format_first;
-    ctrl->bMaxVersion = format_last;
-    ctrl->bPreferedVersion = format_last;
+    memset(ctrl_out, 0, sizeof *ctrl_out);
+    ctrl_out->bmHint = 1;
+    ctrl_out->bFormatIndex = iformat;
+    ctrl_out->bFrameIndex = iframe;
+    ctrl_out->dwFrameInterval = frame_interval;
+    ctrl_out->wKeyFrameRate = 0;
+    ctrl_out->wPFrameRate = 0;
+    ctrl_out->wCompQuality = 0;
+    ctrl_out->wCompWindowSize = 0;
+    ctrl_out->wDelay = 0;
+    ctrl_out->dwMaxVideoFrameSize = get_frame_size(frame_format->video_format, frame_format->wWidth, frame_format->wHeight);
+    ctrl_out->dwMaxPayloadTransferSize = dwMaxPayloadTransferSize;
+    ctrl_out->dwClockFrequency = 0;
+    ctrl_out->bmFramingInfo = 3;
+    ctrl_out->bPreferedVersion = format_last;
+    ctrl_out->bMinVersion = format_first;
+    ctrl_out->bMaxVersion = format_last;
 
     if (settings->debug)
     {
-        uvc_dump_streaming_control(ctrl);
+        printf("UVC: Control OUT: ");
+        uvc_dump_streaming_control(ctrl_out);
     }
 
     if (uvc_request->control == UVC_VS_COMMIT_CONTROL && action == STREAM_CONTROL_SET)
     {
+        if (settings->debug)
+        {
+            uvc_dump_frame_format(frame_format, "UVC: Frame");
+        }
+
         events->apply_frame_format = frame_format;
     }
 }

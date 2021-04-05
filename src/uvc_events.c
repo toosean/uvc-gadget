@@ -146,7 +146,7 @@ static void uvc_events_process_streaming(struct processing *processing)
         break;
 
     case UVC_GET_MAX:
-        uvc_fill_streaming_control(processing, ctrl, STREAM_CONTROL_MAX, 0, 0);
+        uvc_fill_streaming_control(processing, ctrl, STREAM_CONTROL_MAX, ctrl);
         break;
 
     case UVC_GET_CUR:
@@ -157,7 +157,7 @@ static void uvc_events_process_streaming(struct processing *processing)
 
     case UVC_GET_MIN:
     case UVC_GET_DEF:
-        uvc_fill_streaming_control(processing, ctrl, STREAM_CONTROL_MIN, 0, 0);
+        uvc_fill_streaming_control(processing, ctrl, STREAM_CONTROL_MIN, ctrl);
         break;
 
     case UVC_GET_RES:
@@ -250,17 +250,6 @@ static void uvc_events_process_setup(struct processing *processing)
     }
 }
 
-static void uvc_events_process_data_control(struct processing *processing,
-                                            struct uvc_request_data *data,
-                                            struct uvc_streaming_control *target)
-{
-    struct uvc_streaming_control *ctrl = (struct uvc_streaming_control *)&data->data;
-    unsigned int iformat = (unsigned int)ctrl->bFormatIndex;
-    unsigned int iframe = (unsigned int)ctrl->bFrameIndex;
-
-    uvc_fill_streaming_control(processing, target, STREAM_CONTROL_SET, iformat, iframe);
-}
-
 static void uvc_events_process_data(struct processing *processing)
 {
     struct uvc_request *uvc_request = &processing->uvc_request;
@@ -275,11 +264,13 @@ static void uvc_events_process_data(struct processing *processing)
     switch (uvc_request->set_control)
     {
     case UVC_VS_PROBE_CONTROL:
-        uvc_events_process_data_control(processing, uvc_request_data, &(uvc->probe));
+        uvc_fill_streaming_control(processing, &(uvc->probe), STREAM_CONTROL_SET,
+                                   (struct uvc_streaming_control *)&uvc_request_data->data);
         break;
 
     case UVC_VS_COMMIT_CONTROL:
-        uvc_events_process_data_control(processing, uvc_request_data, &(uvc->commit));
+        uvc_fill_streaming_control(processing, &(uvc->commit), STREAM_CONTROL_SET,
+                                   (struct uvc_streaming_control *)&uvc_request_data->data);
         break;
 
     case UVC_VS_CONTROL_UNDEFINED:
@@ -327,7 +318,7 @@ void uvc_events_process(struct processing *processing)
 
     case UVC_EVENT_DISCONNECT:
         printf("UVC: Event DISCONNECT\n");
-        processing->events.shutdown_requested = true;
+        // processing->events.shutdown_requested = true;
         break;
 
     case UVC_EVENT_SETUP:

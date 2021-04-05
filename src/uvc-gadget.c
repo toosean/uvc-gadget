@@ -17,6 +17,7 @@ bool show_fps = false;
 bool debug = false;
 bool streaming_status_onboard = false;
 bool autodetect_uvc_device = true;
+bool autodetect_uvc_device = false;
 const char *fb_device_name;
 const char *uvc_device_name;
 const char *v4l2_device_name;
@@ -98,6 +99,8 @@ int init()
     {
         uvc_fill_streaming_control(&processing, &(processing.target.uvc.probe), STREAM_CONTROL_INIT, 0, 0);
         uvc_fill_streaming_control(&processing, &(processing.target.uvc.commit), STREAM_CONTROL_INIT, 0, 0);
+        uvc_fill_streaming_control(&processing, &(processing.target.uvc.probe), STREAM_CONTROL_INIT, NULL);
+        uvc_fill_streaming_control(&processing, &(processing.target.uvc.commit), STREAM_CONTROL_INIT, NULL);
 
         uvc_events_subscribe(&processing);
     }
