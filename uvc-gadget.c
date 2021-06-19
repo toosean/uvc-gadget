@@ -1015,7 +1015,8 @@ static void v4l2_get_available_formats()
     fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
     while (ioctl(v4l2_dev.fd, VIDIOC_ENUM_FMT, &fmtdesc) == 0) {
-        if (fmtdesc.pixelformat == V4L2_PIX_FMT_MJPEG || fmtdesc.pixelformat == V4L2_PIX_FMT_YUYV) {
+        //include JPEG format
+        if (fmtdesc.pixelformat == V4L2_PIX_FMT_JPEG || fmtdesc.pixelformat == V4L2_PIX_FMT_MJPEG || fmtdesc.pixelformat == V4L2_PIX_FMT_YUYV) {
             frmsize.pixel_format = fmtdesc.pixelformat;
             frmsize.index = 0;
             while (ioctl(v4l2_dev.fd, VIDIOC_ENUM_FRAMESIZES, &frmsize) >= 0) {
@@ -1179,7 +1180,8 @@ static void uvc_v4l2_video_process()
      * Do not dequeue buffers from UVC side until there are atleast
      * 2 buffers available at UVC domain.
      */
-    if (!uvc_shutdown_requested && ((uvc_dev.dqbuf_count + 1) >= uvc_dev.qbuf_count)) {
+    // dont know any detail,but in my case alway 1 buffer available
+    if (!uvc_shutdown_requested && uvc_dev.dqbuf_count >= uvc_dev.qbuf_count) {
         return;
     }
 
@@ -1455,7 +1457,8 @@ static void uvc_fill_streaming_control(struct uvc_streaming_control * ctrl,
 
     if (uvc_dev.control == UVC_VS_COMMIT_CONTROL && action == STREAM_CONTROL_SET) {
         if (settings.source_device == DEVICE_TYPE_V4L2) {
-            v4l2_apply_format(&v4l2_dev, frame_format->video_format, frame_format->wWidth, frame_format->wHeight);
+            //in my case ,force use V4L2_PIX_FMT_JPEG format
+            v4l2_apply_format(&v4l2_dev, V4L2_PIX_FMT_JPEG, frame_format->wWidth, frame_format->wHeight);
         }
         v4l2_apply_format(&uvc_dev, frame_format->video_format, frame_format->wWidth, frame_format->wHeight);
     }
