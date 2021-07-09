@@ -1487,11 +1487,8 @@ static void uvc_interface_control(unsigned int interface,
     }
 
     if (!control_mapping[i].enabled) {
-        printf("UVC: %s - %s - %s - DISABLED\n", interface_name, request_code_name,
-            control_mapping[i].uvc_name);
-        resp->length = -EL2HLT;
-        uvc_dev.request_error_code = REQEC_INVALID_CONTROL;
-        return;
+        printf("UVC: %s - %s - %s - OVERRIDE\n", interface_name, request_code_name,
+                control_mapping[i].uvc_name);
     }
 
     printf("UVC: %s - %s - %s\n", interface_name, request_code_name, control_mapping[i].uvc_name);
