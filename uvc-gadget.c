@@ -978,6 +978,30 @@ static void v4l2_get_controls()
             }
         }
     }
+
+    for (i = 0; i < control_mapping_size; i++) {
+
+        if (control_mapping[i].uvc == UVC_PU_BRIGHTNESS_CONTROL) 
+
+            control_mapping[i].enabled       = true;
+            control_mapping[i].minimum       = -64;
+            control_mapping[i].maximum       = 64;
+            control_mapping[i].step          = 1;
+            control_mapping[i].default_value = 0;
+            control_mapping[i].value         = 0;
+            
+            printf("V4L2-FAKE:  UVC: min: %d, max: %d, step: %d, default: %d, value: %d\n",
+                control_mapping[i].minimum,
+                control_mapping[i].maximum,
+                control_mapping[i].step,
+                control_mapping[i].default_value,
+                control_mapping[i].value
+            );
+
+        }
+
+    }
+
 }
 
 static void v4l2_close()
@@ -1456,6 +1480,9 @@ static void uvc_fill_streaming_control(struct uvc_streaming_control * ctrl,
     dump_uvc_streaming_control(ctrl);
 
     if (uvc_dev.control == UVC_VS_COMMIT_CONTROL && action == STREAM_CONTROL_SET) {
+
+        printf("INFO: uvc_dev.control == UVC_VS_COMMIT_CONTROL && action == STREAM_CONTROL_SET\n");
+
         if (settings.source_device == DEVICE_TYPE_V4L2) {
             //in my case ,force use V4L2_PIX_FMT_JPEG format
             v4l2_apply_format(&v4l2_dev, V4L2_PIX_FMT_JPEG, frame_format->wWidth, frame_format->wHeight);
